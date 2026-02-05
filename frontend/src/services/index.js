@@ -17,6 +17,9 @@ import {
   leadEnglishTestResults,
 } from '../mockData';
 
+// Import additional services
+export { applicationService, journeyService, taskService, reportService } from './applicationService';
+
 // Simulate API delay
 const delay = (ms = 300) => new Promise(resolve => setTimeout(resolve, ms));
 

@@ -6,6 +6,9 @@ import {
   GraduationCap,
   Settings,
   BookOpen,
+  FileText,
+  CheckSquare,
+  BarChart3,
 } from 'lucide-react';
 import { colors } from '../theme';
 
@@ -68,8 +71,11 @@ const Sidebar = () => {
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/leads', label: 'Leads', icon: Users },
+    { path: '/applications', label: 'Applications', icon: FileText },
     { path: '/universities', label: 'Universities', icon: GraduationCap },
     { path: '/courses', label: 'Courses', icon: BookOpen },
+    { path: '/tasks', label: 'Tasks', icon: CheckSquare },
+    { path: '/reports', label: 'Reports', icon: BarChart3 },
     { path: '/settings', label: 'Settings', icon: Settings },
   ];
 
