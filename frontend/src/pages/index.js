@@ -6,3 +6,4 @@ export { default as Settings } from './Settings';
 export { Applications, ApplicationDetails } from './Applications';
 export { default as Tasks } from './Tasks';
 export { default as Reports } from './Reports';
+export { Login, Register, ForgotPassword, ResetPassword, VerifyOtp } from './Auth';

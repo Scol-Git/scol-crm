@@ -19,6 +19,7 @@ import {
 
 // Import additional services
 export { applicationService, journeyService, taskService, reportService } from './applicationService';
+export { authService } from './authService';
 
 // Simulate API delay
 const delay = (ms = 300) => new Promise(resolve => setTimeout(resolve, ms));

@@ -1,10 +1,19 @@
 import React, { useState } from 'react';
-import { Bell, Search, User, ChevronDown } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Bell, Search, ChevronDown, LogOut } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme';
 
 const Header = ({ title }) => {
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [searchValue, setSearchValue] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
 
   const headerStyle = {
     height: '70px',
@@ -190,16 +199,17 @@ const Header = ({ title }) => {
             e.currentTarget.style.backgroundColor = 'transparent';
           }}
         >
-          <div style={avatarStyle}>A</div>
+          <div style={avatarStyle}>{user?.fullName?.charAt(0) || 'A'}</div>
           <div style={userInfoStyle}>
-            <span style={userNameStyle}>Admin User</span>
-            <span style={userRoleStyle}>Administrator</span>
+            <span style={userNameStyle}>{user?.fullName || 'Admin User'}</span>
+            <span style={userRoleStyle}>{user?.userType === 'admin' ? 'Administrator' : 'User'}</span>
           </div>
           <ChevronDown size={16} color={colors.textMuted} />
 
           <div style={dropdownStyle}>
             <div
               style={dropdownItemStyle}
+              onClick={() => navigate('/settings')}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = colors.appBg;
               }}
@@ -211,6 +221,7 @@ const Header = ({ title }) => {
             </div>
             <div
               style={dropdownItemStyle}
+              onClick={() => navigate('/settings')}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = colors.appBg;
               }}
@@ -221,7 +232,8 @@ const Header = ({ title }) => {
               Settings
             </div>
             <div
-              style={{ ...dropdownItemStyle, color: colors.brandSecondary, borderTop: `1px solid ${colors.borderLight}` }}
+              style={{ ...dropdownItemStyle, color: colors.brandSecondary, borderTop: `1px solid ${colors.borderLight}`, display: 'flex', alignItems: 'center', gap: '8px' }}
+              onClick={handleLogout}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = colors.appBg;
               }}
@@ -229,6 +241,7 @@ const Header = ({ title }) => {
                 e.currentTarget.style.backgroundColor = 'transparent';
               }}
             >
+              <LogOut size={16} />
               Logout
             </div>
           </div>

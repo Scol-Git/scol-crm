@@ -7,3 +7,4 @@ export { default as Badge } from './Badge';
 export { default as Modal } from './Modal';
 export { default as SearchInput } from './SearchInput';
 export { default as MetricCard } from './MetricCard';
+export { default as ProtectedRoute } from './ProtectedRoute';
