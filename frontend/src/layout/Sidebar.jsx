@@ -9,11 +9,12 @@ import {
   FileText,
   CheckSquare,
   BarChart3,
+  X,
 } from 'lucide-react';
 import { colors } from '../theme';
 import logoWhite from '../assets/Logo/logo_white.png';
 
-const Sidebar = () => {
+const Sidebar = ({ isOpen, isMobile, onClose }) => {
   const location = useLocation();
 
   const sidebarStyle = {
@@ -24,14 +25,18 @@ const Sidebar = () => {
     display: 'flex',
     flexDirection: 'column',
     position: 'fixed',
-    left: 0,
+    left: isMobile ? (isOpen ? 0 : '-260px') : 0,
     top: 0,
     zIndex: 100,
+    transition: 'left 0.3s ease',
   };
 
   const logoContainerStyle = {
     padding: '24px',
     borderBottom: `1px solid ${colors.borderColor}`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   };
 
   const logoStyle = {
@@ -45,6 +50,19 @@ const Sidebar = () => {
     height: '60px',
     width: 'auto',
     objectFit: 'contain',
+  };
+
+  const closeButtonStyle = {
+    display: isMobile ? 'flex' : 'none',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '32px',
+    height: '32px',
+    border: 'none',
+    background: 'transparent',
+    color: colors.textMuted,
+    cursor: 'pointer',
+    borderRadius: '6px',
   };
 
   const navStyle = {
@@ -86,6 +104,13 @@ const Sidebar = () => {
         <div style={logoStyle}>
           <img src={logoWhite} alt="SCOL CRM" style={logoImageStyle} />
         </div>
+        <button
+          style={closeButtonStyle}
+          onClick={onClose}
+          aria-label="Close menu"
+        >
+          <X size={20} />
+        </button>
       </div>
 
       <nav style={navStyle}>
@@ -99,6 +124,7 @@ const Sidebar = () => {
               key={item.path}
               to={item.path}
               style={getLinkStyle(isActive)}
+              onClick={isMobile ? onClose : undefined}
               onMouseEnter={(e) => {
                 if (!isActive) {
                   e.currentTarget.style.backgroundColor = colors.headerBg;

@@ -13,6 +13,7 @@ const UniversityList = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [countries, setCountries] = useState([]);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [formData, setFormData] = useState({
     uniName: '',
     sysCountryId: '',
@@ -26,6 +27,12 @@ const UniversityList = () => {
   useEffect(() => {
     loadUniversities();
     loadCountries();
+
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
@@ -242,8 +249,10 @@ const UniversityList = () => {
       <div
         style={{
           display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
           justifyContent: 'space-between',
-          alignItems: 'center',
+          alignItems: isMobile ? 'stretch' : 'center',
+          gap: isMobile ? '12px' : '16px',
           marginBottom: '24px',
         }}
       >
@@ -251,22 +260,24 @@ const UniversityList = () => {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search by university name..."
-          style={{ width: '350px' }}
+          style={{ width: isMobile ? '100%' : '350px' }}
         />
-        <Button icon={Plus} onClick={() => setShowAddModal(true)}>
+        <Button icon={Plus} onClick={() => setShowAddModal(true)} style={{ width: isMobile ? '100%' : 'auto' }}>
           Add University
         </Button>
       </div>
 
       {/* Universities Table */}
       <Card padding="0">
-        <Table
-          columns={columns}
-          data={filteredUniversities}
-          loading={loading}
-          onRowClick={(uni) => navigate(`/universities/${uni.id}`)}
-          emptyMessage="No universities found"
-        />
+        <div style={{ overflowX: 'auto' }}>
+          <Table
+            columns={columns}
+            data={filteredUniversities}
+            loading={loading}
+            onRowClick={(uni) => navigate(`/universities/${uni.id}`)}
+            emptyMessage="No universities found"
+          />
+        </div>
       </Card>
 
       {/* Add University Modal */}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, Phone } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -17,6 +17,15 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [loginMethod, setLoginMethod] = useState('email'); // 'email' or 'phone'
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -42,13 +51,14 @@ const Login = () => {
   const containerStyle = {
     minHeight: '100vh',
     display: 'flex',
+    flexDirection: isMobile ? 'column' : 'row',
     backgroundColor: colors.appBg,
   };
 
   const leftPanelStyle = {
-    flex: 1,
+    flex: isMobile ? 'none' : 1,
     backgroundColor: colors.sidebarBg,
-    display: 'flex',
+    display: isMobile ? 'none' : 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
@@ -63,7 +73,8 @@ const Login = () => {
     flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: '40px',
+    padding: isMobile ? '24px 20px' : '40px',
+    minHeight: isMobile ? '100vh' : 'auto',
   };
 
   const formContainerStyle = {
@@ -75,7 +86,8 @@ const Login = () => {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
-    marginBottom: '48px',
+    marginBottom: isMobile ? '32px' : '48px',
+    justifyContent: isMobile ? 'center' : 'flex-start',
   };
 
   const logoIconStyle = {
@@ -92,16 +104,18 @@ const Login = () => {
   };
 
   const titleStyle = {
-    fontSize: '28px',
+    fontSize: isMobile ? '24px' : '28px',
     fontWeight: '700',
     color: colors.textPrimary,
     margin: '0 0 8px 0',
+    textAlign: isMobile ? 'center' : 'left',
   };
 
   const subtitleStyle = {
-    fontSize: '16px',
+    fontSize: isMobile ? '14px' : '16px',
     color: colors.textSecondary,
     margin: '0 0 32px 0',
+    textAlign: isMobile ? 'center' : 'left',
   };
 
   const inputGroupStyle = {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, Phone, User } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -21,6 +21,15 @@ const Register = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [errors, setErrors] = useState({});
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -92,13 +101,14 @@ const Register = () => {
   const containerStyle = {
     minHeight: '100vh',
     display: 'flex',
+    flexDirection: isMobile ? 'column' : 'row',
     backgroundColor: colors.appBg,
   };
 
   const leftPanelStyle = {
-    flex: 1,
+    flex: isMobile ? 'none' : 1,
     backgroundColor: colors.sidebarBg,
-    display: 'flex',
+    display: isMobile ? 'none' : 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
@@ -113,8 +123,9 @@ const Register = () => {
     flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: '40px',
+    padding: isMobile ? '24px 20px' : '40px',
     overflowY: 'auto',
+    minHeight: isMobile ? '100vh' : 'auto',
   };
 
   const formContainerStyle = {

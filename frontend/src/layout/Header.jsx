@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Search, ChevronDown, LogOut } from 'lucide-react';
+import { Bell, Search, ChevronDown, LogOut, Menu } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme';
 
-const Header = ({ title }) => {
+const Header = ({ title, onMenuClick, isMobile }) => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [searchValue, setSearchValue] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
 
   const handleLogout = async () => {
     await logout();
@@ -21,33 +22,52 @@ const Header = ({ title }) => {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '0 32px',
+    padding: isMobile ? '0 16px' : '0 32px',
     position: 'sticky',
     top: 0,
     zIndex: 50,
+    gap: '16px',
   };
 
   const leftStyle = {
     display: 'flex',
     alignItems: 'center',
-    gap: '24px',
+    gap: isMobile ? '12px' : '24px',
+    flex: isMobile ? 1 : 'none',
+  };
+
+  const menuButtonStyle = {
+    display: isMobile ? 'flex' : 'none',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '40px',
+    height: '40px',
+    border: 'none',
+    background: 'transparent',
+    color: colors.textLight,
+    cursor: 'pointer',
+    borderRadius: '8px',
   };
 
   const titleStyle = {
     color: colors.textLight,
-    fontSize: '20px',
+    fontSize: isMobile ? '16px' : '20px',
     fontWeight: '600',
     margin: 0,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   };
 
   const searchContainerStyle = {
     position: 'relative',
-    display: 'flex',
+    display: isMobile ? (showSearch ? 'flex' : 'none') : 'flex',
     alignItems: 'center',
+    flex: isMobile && showSearch ? 1 : 'none',
   };
 
   const searchInputStyle = {
-    width: '300px',
+    width: isMobile ? '100%' : '300px',
     padding: '10px 14px 10px 40px',
     fontSize: '14px',
     border: `1px solid ${colors.borderColor}`,
@@ -97,7 +117,7 @@ const Header = ({ title }) => {
   const userMenuStyle = {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
+    gap: isMobile ? '8px' : '12px',
     padding: '8px 12px',
     borderRadius: '8px',
     cursor: 'pointer',
@@ -116,10 +136,11 @@ const Header = ({ title }) => {
     color: '#FFFFFF',
     fontWeight: '600',
     fontSize: '14px',
+    flexShrink: 0,
   };
 
   const userInfoStyle = {
-    display: 'flex',
+    display: isMobile ? 'none' : 'flex',
     flexDirection: 'column',
   };
 
@@ -159,21 +180,52 @@ const Header = ({ title }) => {
   return (
     <header style={headerStyle}>
       <div style={leftStyle}>
+        {/* Mobile menu button */}
+        <button
+          style={menuButtonStyle}
+          onClick={onMenuClick}
+          aria-label="Toggle menu"
+        >
+          <Menu size={24} />
+        </button>
         <h1 style={titleStyle}>{title}</h1>
       </div>
 
-      <div style={searchContainerStyle}>
-        <Search size={18} style={searchIconStyle} />
-        <input
-          type="text"
-          placeholder="Global search..."
-          value={searchValue}
-          onChange={(e) => setSearchValue(e.target.value)}
-          style={searchInputStyle}
-        />
-      </div>
+      {/* Search - hidden on mobile by default, shown when toggled */}
+      {(!isMobile || showSearch) && (
+        <div style={searchContainerStyle}>
+          <Search size={18} style={searchIconStyle} />
+          <input
+            type="text"
+            placeholder="Global search..."
+            value={searchValue}
+            onChange={(e) => setSearchValue(e.target.value)}
+            style={searchInputStyle}
+          />
+        </div>
+      )}
 
       <div style={rightStyle}>
+        {/* Mobile search toggle */}
+        {isMobile && !showSearch && (
+          <button
+            style={iconButtonStyle}
+            onClick={() => setShowSearch(true)}
+            aria-label="Search"
+          >
+            <Search size={20} />
+          </button>
+        )}
+        {isMobile && showSearch && (
+          <button
+            style={iconButtonStyle}
+            onClick={() => setShowSearch(false)}
+            aria-label="Close search"
+          >
+            <span style={{ fontSize: '16px', fontWeight: 'bold' }}>✕</span>
+          </button>
+        )}
+
         <button
           style={iconButtonStyle}
           onMouseEnter={(e) => {

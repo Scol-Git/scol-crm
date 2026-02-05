@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { colors } from '../theme';
 
@@ -10,6 +10,16 @@ const Modal = ({
   size = 'medium',
   footer,
 }) => {
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   if (!isOpen) return null;
 
   const sizes = {
@@ -27,18 +37,18 @@ const Modal = ({
     bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     display: 'flex',
-    alignItems: 'center',
+    alignItems: isMobile ? 'flex-end' : 'center',
     justifyContent: 'center',
     zIndex: 1000,
-    padding: '20px',
+    padding: isMobile ? '0' : '20px',
   };
 
   const modalStyle = {
     backgroundColor: colors.contentSurface,
-    borderRadius: '12px',
+    borderRadius: isMobile ? '16px 16px 0 0' : '12px',
     width: '100%',
-    maxWidth: sizes[size],
-    maxHeight: '90vh',
+    maxWidth: isMobile ? '100%' : sizes[size],
+    maxHeight: isMobile ? '90vh' : '90vh',
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
@@ -46,7 +56,7 @@ const Modal = ({
   };
 
   const headerStyle = {
-    padding: '20px 24px',
+    padding: isMobile ? '16px 20px' : '20px 24px',
     borderBottom: `1px solid ${colors.borderLight}`,
     display: 'flex',
     alignItems: 'center',
@@ -55,7 +65,7 @@ const Modal = ({
 
   const titleStyle = {
     margin: 0,
-    fontSize: '18px',
+    fontSize: isMobile ? '16px' : '18px',
     fontWeight: '600',
     color: colors.textPrimary,
   };
@@ -74,18 +84,19 @@ const Modal = ({
   };
 
   const contentStyle = {
-    padding: '24px',
+    padding: isMobile ? '20px' : '24px',
     overflowY: 'auto',
     flex: 1,
   };
 
   const footerStyle = {
-    padding: '16px 24px',
+    padding: isMobile ? '16px 20px' : '16px 24px',
     borderTop: `1px solid ${colors.borderLight}`,
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: isMobile ? 'stretch' : 'flex-end',
     gap: '12px',
+    flexDirection: isMobile ? 'column-reverse' : 'row',
   };
 
   const handleOverlayClick = (e) => {

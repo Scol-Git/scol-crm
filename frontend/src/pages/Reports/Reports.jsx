@@ -18,9 +18,16 @@ const Reports = () => {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState('6months');
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
     loadReports();
+
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const loadReports = async () => {
@@ -64,18 +71,25 @@ const Reports = () => {
       {/* Header */}
       <div style={{
         display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
+        alignItems: isMobile ? 'stretch' : 'center',
+        gap: isMobile ? '16px' : '24px',
         marginBottom: '24px'
       }}>
-        <div>
-          <h2 style={{ margin: 0, color: colors.textPrimary }}>Analytics & Reports</h2>
-          <p style={{ margin: '4px 0 0 0', color: colors.textSecondary }}>
+        <div style={{ textAlign: isMobile ? 'center' : 'left' }}>
+          <h2 style={{ margin: 0, color: colors.textPrimary, fontSize: isMobile ? '20px' : '24px' }}>Analytics & Reports</h2>
+          <p style={{ margin: '4px 0 0 0', color: colors.textSecondary, fontSize: isMobile ? '13px' : '14px' }}>
             Track performance metrics and generate insights
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <div style={{ width: '180px' }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: '12px',
+          alignItems: isMobile ? 'stretch' : 'center'
+        }}>
+          <div style={{ width: isMobile ? '100%' : '180px' }}>
             <Select
               value={dateRange}
               onChange={(e) => setDateRange(e.target.value)}
@@ -87,7 +101,7 @@ const Reports = () => {
               ]}
             />
           </div>
-          <Button variant="secondary" icon={Download}>
+          <Button variant="secondary" icon={Download} style={{ width: isMobile ? '100%' : 'auto' }}>
             Export Report
           </Button>
         </div>
@@ -96,9 +110,9 @@ const Reports = () => {
       {/* Summary Metrics */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: '20px',
-        marginBottom: '32px',
+        gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: isMobile ? '16px' : '20px',
+        marginBottom: isMobile ? '24px' : '32px',
       }}>
         <MetricCard
           title="Total Applications"
@@ -131,8 +145,8 @@ const Reports = () => {
       {/* Charts Grid */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))',
-        gap: '24px',
+        gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(400px, 1fr))',
+        gap: isMobile ? '16px' : '24px',
         marginBottom: '24px',
       }}>
         {/* Monthly Trends */}

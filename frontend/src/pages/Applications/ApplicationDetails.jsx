@@ -24,9 +24,16 @@ const ApplicationDetails = () => {
   const [application, setApplication] = useState(null);
   const [journeyEvents, setJourneyEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
     loadApplication();
+
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, [id]);
 
   const loadApplication = async () => {
@@ -126,21 +133,38 @@ const ApplicationDetails = () => {
       </button>
 
       {/* Header */}
-      <Card style={{ marginBottom: '24px' }} padding="32px">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <Card style={{ marginBottom: '24px' }} padding={isMobile ? '20px' : '32px'}>
+        <div style={{
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          justifyContent: 'space-between',
+          alignItems: isMobile ? 'stretch' : 'flex-start',
+          gap: isMobile ? '16px' : '0',
+        }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-              <h1 style={{ margin: 0, fontSize: '24px', color: colors.textPrimary }}>
+            <div style={{
+              display: 'flex',
+              flexDirection: isMobile ? 'column' : 'row',
+              alignItems: isMobile ? 'flex-start' : 'center',
+              gap: '12px',
+              marginBottom: '8px'
+            }}>
+              <h1 style={{ margin: 0, fontSize: isMobile ? '20px' : '24px', color: colors.textPrimary }}>
                 {application.course?.courseName}
               </h1>
               <Badge variant={isRejected ? 'error' : 'success'} size="large">
                 {formatStatus(application.status)}
               </Badge>
             </div>
-            <p style={{ margin: 0, color: colors.textSecondary, fontSize: '16px' }}>
+            <p style={{ margin: 0, color: colors.textSecondary, fontSize: isMobile ? '14px' : '16px' }}>
               {application.university?.uniName}
             </p>
-            <div style={{ marginTop: '16px', display: 'flex', gap: '24px' }}>
+            <div style={{
+              marginTop: '16px',
+              display: 'flex',
+              flexDirection: isMobile ? 'column' : 'row',
+              gap: isMobile ? '12px' : '24px'
+            }}>
               <div>
                 <span style={{ fontSize: '12px', color: colors.textSecondary }}>Applicant</span>
                 <div style={{ fontWeight: '500', color: colors.textPrimary }}>
@@ -161,9 +185,13 @@ const ApplicationDetails = () => {
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <Button variant="secondary" icon={MessageSquare}>Add Note</Button>
-            <Button>Update Status</Button>
+          <div style={{
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            gap: '12px'
+          }}>
+            <Button variant="secondary" icon={MessageSquare} style={{ width: isMobile ? '100%' : 'auto' }}>Add Note</Button>
+            <Button style={{ width: isMobile ? '100%' : 'auto' }}>Update Status</Button>
           </div>
         </div>
       </Card>
@@ -251,7 +279,7 @@ const ApplicationDetails = () => {
       )}
 
       {/* Main Content Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: isMobile ? '16px' : '24px' }}>
         {/* Left Column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {/* Documents */}

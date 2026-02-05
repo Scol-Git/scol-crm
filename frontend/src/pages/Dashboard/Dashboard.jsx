@@ -15,9 +15,16 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
     loadStats();
+
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const loadStats = async () => {
@@ -41,19 +48,35 @@ const Dashboard = () => {
 
   const metricsGrid = {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-    gap: '24px',
-    marginBottom: '32px',
+    gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: isMobile ? '16px' : '24px',
+    marginBottom: isMobile ? '24px' : '32px',
   };
 
   const chartsGrid = {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-    gap: '24px',
-    marginBottom: '32px',
+    gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(340px, 1fr))',
+    gap: isMobile ? '16px' : '24px',
+    marginBottom: isMobile ? '24px' : '32px',
   };
 
-  const recentLeadsColumns = [
+  const recentLeadsColumns = isMobile ? [
+    {
+      title: 'Name',
+      dataIndex: 'fullName',
+      render: (value, row) => (
+        <div>
+          <span style={{ fontWeight: '500', color: colors.textPrimary, display: 'block' }}>{value}</span>
+          <span style={{ fontSize: '12px', color: colors.textSecondary }}>{row.email || '-'}</span>
+        </div>
+      ),
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      render: (value) => <Badge variant={value}>{value}</Badge>,
+    },
+  ] : [
     {
       title: 'Name',
       dataIndex: 'fullName',

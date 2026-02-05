@@ -11,9 +11,16 @@ const Courses = () => {
   const [filteredCourses, setFilteredCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
     loadCourses();
+
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
@@ -109,8 +116,10 @@ const Courses = () => {
       <div
         style={{
           display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
           justifyContent: 'space-between',
-          alignItems: 'center',
+          alignItems: isMobile ? 'stretch' : 'center',
+          gap: isMobile ? '12px' : '16px',
           marginBottom: '24px',
         }}
       >
@@ -118,22 +127,24 @@ const Courses = () => {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search courses..."
-          style={{ width: '350px' }}
+          style={{ width: isMobile ? '100%' : '350px' }}
         />
-        <div style={{ color: colors.textSecondary, fontSize: '14px' }}>
+        <div style={{ color: colors.textSecondary, fontSize: '14px', textAlign: isMobile ? 'center' : 'right' }}>
           {filteredCourses.length} courses found
         </div>
       </div>
 
       {/* Courses Table */}
       <Card padding="0">
-        <Table
-          columns={columns}
-          data={filteredCourses}
-          loading={loading}
-          onRowClick={(course) => navigate(`/universities/${course.uniId}`)}
-          emptyMessage="No courses found"
-        />
+        <div style={{ overflowX: 'auto' }}>
+          <Table
+            columns={columns}
+            data={filteredCourses}
+            loading={loading}
+            onRowClick={(course) => navigate(`/universities/${course.uniId}`)}
+            emptyMessage="No courses found"
+          />
+        </div>
       </Card>
     </div>
   );

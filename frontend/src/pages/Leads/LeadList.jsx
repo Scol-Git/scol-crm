@@ -14,6 +14,7 @@ const LeadList = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedLead, setSelectedLead] = useState(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [formData, setFormData] = useState({
     fullName: '',
     phone: '',
@@ -27,6 +28,12 @@ const LeadList = () => {
 
   useEffect(() => {
     loadLeads();
+
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
@@ -138,7 +145,65 @@ const LeadList = () => {
     setSelectedLead(null);
   };
 
-  const columns = [
+  const columns = isMobile ? [
+    {
+      title: 'Lead',
+      dataIndex: 'fullName',
+      render: (value, row) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '8px',
+              backgroundColor: colors.brandPrimary,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              fontWeight: '600',
+              fontSize: '14px',
+              flexShrink: 0,
+            }}
+          >
+            {value?.charAt(0) || '?'}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: '500', color: colors.textPrimary }}>{value}</div>
+            <div style={{ fontSize: '12px', color: colors.textSecondary }}>{row.phone || '-'}</div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      render: (value) => <Badge variant={value}>{value}</Badge>,
+    },
+    {
+      title: '',
+      dataIndex: 'id',
+      render: (_, row) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/leads/${row.id}`);
+          }}
+          style={{
+            padding: '6px',
+            border: 'none',
+            backgroundColor: 'transparent',
+            cursor: 'pointer',
+            borderRadius: '4px',
+            color: colors.textSecondary,
+          }}
+          title="View Profile"
+        >
+          <Eye size={16} />
+        </button>
+      ),
+    },
+  ] : [
     {
       title: 'Name',
       dataIndex: 'fullName',
@@ -248,8 +313,10 @@ const LeadList = () => {
       <div
         style={{
           display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
           justifyContent: 'space-between',
-          alignItems: 'center',
+          alignItems: isMobile ? 'stretch' : 'center',
+          gap: isMobile ? '12px' : '16px',
           marginBottom: '24px',
         }}
       >
@@ -257,22 +324,24 @@ const LeadList = () => {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search by name, email, or phone..."
-          style={{ width: '350px' }}
+          style={{ width: isMobile ? '100%' : '350px' }}
         />
-        <Button icon={Plus} onClick={() => setShowAddModal(true)}>
+        <Button icon={Plus} onClick={() => setShowAddModal(true)} style={{ width: isMobile ? '100%' : 'auto' }}>
           Add Lead
         </Button>
       </div>
 
       {/* Leads Table */}
       <Card padding="0">
-        <Table
-          columns={columns}
-          data={filteredLeads}
-          loading={loading}
-          onRowClick={(lead) => navigate(`/leads/${lead.id}`)}
-          emptyMessage="No leads found"
-        />
+        <div style={{ overflowX: 'auto' }}>
+          <Table
+            columns={columns}
+            data={filteredLeads}
+            loading={loading}
+            onRowClick={(lead) => navigate(`/leads/${lead.id}`)}
+            emptyMessage="No leads found"
+          />
+        </div>
       </Card>
 
       {/* Add Lead Modal */}
@@ -296,7 +365,7 @@ const LeadList = () => {
           </>
         }
       >
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
           <div style={{ gridColumn: '1 / -1' }}>
             <Input
               label="Full Name"
@@ -378,7 +447,7 @@ const LeadList = () => {
           </>
         }
       >
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
           <div style={{ gridColumn: '1 / -1' }}>
             <Input
               label="Full Name"

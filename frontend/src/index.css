@@ -13,6 +13,17 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* Responsive breakpoints */
+  --breakpoint-xs: 480px;
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+
+  /* Sidebar width */
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 0px;
 }
 
 body {
@@ -20,10 +31,33 @@ body {
   min-height: 100vh;
   background-color: #F9FAFB;
   color: #1F2937;
+  overflow-x: hidden;
 }
 
 #root {
   min-height: 100vh;
+}
+
+/* Mobile overlay when sidebar is open */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 99;
+}
+
+.sidebar-overlay.active {
+  display: block;
+}
+
+@media (min-width: 1024px) {
+  .sidebar-overlay {
+    display: none !important;
+  }
 }
 
 a {
@@ -80,3 +114,73 @@ input, select, textarea {
   outline: 2px solid #8B2125;
   outline-offset: 2px;
 }
+
+/* Responsive utility classes */
+.hide-mobile {
+  display: block;
+}
+
+.show-mobile {
+  display: none !important;
+}
+
+@media (max-width: 1023px) {
+  .hide-mobile {
+    display: none !important;
+  }
+
+  .show-mobile {
+    display: flex !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .hide-tablet {
+    display: none !important;
+  }
+}
+
+/* Mobile menu button */
+.mobile-menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: transparent;
+  color: #E5E7EB;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background-color 0.2s;
+}
+
+.mobile-menu-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 1023px) {
+  .mobile-menu-btn {
+    display: flex;
+  }
+}
+
+/* Responsive table wrapper */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Responsive grid helpers */
+.responsive-grid {
+  display: grid;
+  gap: 24px;
+}
+
+@media (max-width: 767px) {
+  .responsive-grid {
+    gap: 16px;
+  }
+}
+

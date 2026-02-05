@@ -21,6 +21,7 @@ const Tasks = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [formData, setFormData] = useState({
     title: '',
     dueDate: '',
@@ -30,6 +31,12 @@ const Tasks = () => {
 
   useEffect(() => {
     loadTasks();
+
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
@@ -271,87 +278,91 @@ const Tasks = () => {
       {/* Stats Cards */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-        gap: '16px',
+        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(180px, 1fr))',
+        gap: isMobile ? '12px' : '16px',
         marginBottom: '24px'
       }}>
-        <Card padding="20px">
+        <Card padding={isMobile ? '16px' : '20px'}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              width: '40px',
-              height: '40px',
+              width: isMobile ? '36px' : '40px',
+              height: isMobile ? '36px' : '40px',
               borderRadius: '8px',
               backgroundColor: `${colors.info}15`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: colors.info,
+              flexShrink: 0,
             }}>
-              <Clock size={20} />
+              <Clock size={isMobile ? 18 : 20} />
             </div>
-            <div>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.total}</div>
-              <div style={{ fontSize: '13px', color: colors.textSecondary }}>Total Tasks</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.total}</div>
+              <div style={{ fontSize: isMobile ? '12px' : '13px', color: colors.textSecondary }}>Total Tasks</div>
             </div>
           </div>
         </Card>
-        <Card padding="20px">
+        <Card padding={isMobile ? '16px' : '20px'}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              width: '40px',
-              height: '40px',
+              width: isMobile ? '36px' : '40px',
+              height: isMobile ? '36px' : '40px',
               borderRadius: '8px',
               backgroundColor: `${colors.warning}15`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: colors.warning,
+              flexShrink: 0,
             }}>
-              <AlertTriangle size={20} />
+              <AlertTriangle size={isMobile ? 18 : 20} />
             </div>
-            <div>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.pending}</div>
-              <div style={{ fontSize: '13px', color: colors.textSecondary }}>Pending</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.pending}</div>
+              <div style={{ fontSize: isMobile ? '12px' : '13px', color: colors.textSecondary }}>Pending</div>
             </div>
           </div>
         </Card>
-        <Card padding="20px">
+        <Card padding={isMobile ? '16px' : '20px'}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              width: '40px',
-              height: '40px',
+              width: isMobile ? '36px' : '40px',
+              height: isMobile ? '36px' : '40px',
               borderRadius: '8px',
               backgroundColor: `${colors.error}15`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: colors.error,
+              flexShrink: 0,
             }}>
-              <AlertTriangle size={20} />
+              <AlertTriangle size={isMobile ? 18 : 20} />
             </div>
-            <div>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.overdue}</div>
-              <div style={{ fontSize: '13px', color: colors.textSecondary }}>Overdue</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.overdue}</div>
+              <div style={{ fontSize: isMobile ? '12px' : '13px', color: colors.textSecondary }}>Overdue</div>
             </div>
           </div>
         </Card>
-        <Card padding="20px">
+        <Card padding={isMobile ? '16px' : '20px'}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              width: '40px',
-              height: '40px',
+              width: isMobile ? '36px' : '40px',
+              height: isMobile ? '36px' : '40px',
               borderRadius: '8px',
               backgroundColor: `${colors.success}15`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: colors.success,
+              flexShrink: 0,
             }}>
-              <CheckCircle size={20} />
+              <CheckCircle size={isMobile ? 18 : 20} />
             </div>
-            <div>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.completed}</div>
-              <div style={{ fontSize: '13px', color: colors.textSecondary }}>Completed</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.completed}</div>
+              <div style={{ fontSize: isMobile ? '12px' : '13px', color: colors.textSecondary }}>Completed</div>
             </div>
           </div>
         </Card>
@@ -360,49 +371,61 @@ const Tasks = () => {
       {/* Filters */}
       <div style={{
         display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
+        alignItems: isMobile ? 'stretch' : 'center',
         marginBottom: '24px',
         gap: '16px',
-        flexWrap: 'wrap',
       }}>
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? '12px' : '16px',
+          alignItems: isMobile ? 'stretch' : 'center',
+        }}>
           <SearchInput
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search tasks..."
-            style={{ width: '280px' }}
+            style={{ width: isMobile ? '100%' : '280px' }}
           />
-          <div style={{ width: '160px' }}>
-            <Select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              options={statusOptions}
-              placeholder="Status"
-            />
-          </div>
-          <div style={{ width: '160px' }}>
-            <Select
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value)}
-              options={priorityOptions}
-              placeholder="Priority"
-            />
+          <div style={{
+            display: 'flex',
+            gap: '12px',
+          }}>
+            <div style={{ flex: 1, minWidth: isMobile ? 0 : '160px' }}>
+              <Select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                options={statusOptions}
+                placeholder="Status"
+              />
+            </div>
+            <div style={{ flex: 1, minWidth: isMobile ? 0 : '160px' }}>
+              <Select
+                value={priorityFilter}
+                onChange={(e) => setPriorityFilter(e.target.value)}
+                options={priorityOptions}
+                placeholder="Priority"
+              />
+            </div>
           </div>
         </div>
-        <Button icon={Plus} onClick={() => setShowAddModal(true)}>
+        <Button icon={Plus} onClick={() => setShowAddModal(true)} style={{ width: isMobile ? '100%' : 'auto' }}>
           Add Task
         </Button>
       </div>
 
       {/* Tasks Table */}
       <Card padding="0">
-        <Table
-          columns={columns}
-          data={filteredTasks}
-          loading={loading}
-          emptyMessage="No tasks found"
-        />
+        <div style={{ overflowX: 'auto' }}>
+          <Table
+            columns={columns}
+            data={filteredTasks}
+            loading={loading}
+            emptyMessage="No tasks found"
+          />
+        </div>
       </Card>
 
       {/* Add Task Modal */}

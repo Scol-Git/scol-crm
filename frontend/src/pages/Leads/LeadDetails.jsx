@@ -10,9 +10,16 @@ const LeadDetails = () => {
   const navigate = useNavigate();
   const [lead, setLead] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
     loadLead();
+
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, [id]);
 
   const loadLead = async () => {
@@ -99,12 +106,25 @@ const LeadDetails = () => {
 
       {/* Profile Header */}
       <Card style={{ marginBottom: '24px' }} padding="0">
-        <div style={{ padding: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        <div style={{
+          padding: isMobile ? '20px' : '32px',
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          justifyContent: 'space-between',
+          alignItems: isMobile ? 'center' : 'flex-start',
+          gap: isMobile ? '16px' : '0',
+          textAlign: isMobile ? 'center' : 'left',
+        }}>
+          <div style={{
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            alignItems: 'center',
+            gap: isMobile ? '16px' : '20px'
+          }}>
             <div
               style={{
-                width: '80px',
-                height: '80px',
+                width: isMobile ? '64px' : '80px',
+                height: isMobile ? '64px' : '80px',
                 borderRadius: '16px',
                 backgroundColor: colors.brandPrimary,
                 display: 'flex',
@@ -112,13 +132,14 @@ const LeadDetails = () => {
                 justifyContent: 'center',
                 color: '#fff',
                 fontWeight: '700',
-                fontSize: '32px',
+                fontSize: isMobile ? '24px' : '32px',
+                flexShrink: 0,
               }}
             >
               {lead.fullName?.charAt(0) || '?'}
             </div>
             <div>
-              <h1 style={{ margin: 0, fontSize: '24px', color: colors.textPrimary, fontWeight: '600' }}>
+              <h1 style={{ margin: 0, fontSize: isMobile ? '20px' : '24px', color: colors.textPrimary, fontWeight: '600' }}>
                 {lead.fullName}
               </h1>
               <p style={{ margin: '4px 0 12px 0', color: colors.textSecondary, fontSize: '14px' }}>
@@ -127,14 +148,14 @@ const LeadDetails = () => {
               <Badge variant={lead.status} size="large">{lead.status}</Badge>
             </div>
           </div>
-          <Button icon={Edit2} variant="secondary" onClick={() => navigate(`/leads`)}>
+          <Button icon={Edit2} variant="secondary" onClick={() => navigate(`/leads`)} style={{ width: isMobile ? '100%' : 'auto' }}>
             Edit Profile
           </Button>
         </div>
       </Card>
 
       {/* Details Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(320px, 1fr))', gap: isMobile ? '16px' : '24px' }}>
         {/* Personal Information */}
         <Card title="Personal Information">
           <div style={infoItemStyle}>

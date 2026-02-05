@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Phone, ArrowLeft } from 'lucide-react';
 import { authService } from '../../services/authService';
@@ -13,6 +13,15 @@ const ForgotPassword = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [maskedPhone, setMaskedPhone] = useState('');
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -47,7 +56,7 @@ const ForgotPassword = () => {
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.appBg,
-    padding: '20px',
+    padding: isMobile ? '16px' : '20px',
   };
 
   const cardStyle = {
@@ -56,7 +65,7 @@ const ForgotPassword = () => {
     backgroundColor: colors.contentSurface,
     borderRadius: '16px',
     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-    padding: '40px',
+    padding: isMobile ? '24px' : '40px',
   };
 
   const logoStyle = {
@@ -64,7 +73,7 @@ const ForgotPassword = () => {
     alignItems: 'center',
     justifyContent: 'center',
     gap: '12px',
-    marginBottom: '32px',
+    marginBottom: isMobile ? '24px' : '32px',
   };
 
   const logoIconStyle = {
@@ -81,7 +90,7 @@ const ForgotPassword = () => {
   };
 
   const titleStyle = {
-    fontSize: '24px',
+    fontSize: isMobile ? '22px' : '24px',
     fontWeight: '700',
     color: colors.textPrimary,
     margin: '0 0 8px 0',
@@ -89,7 +98,7 @@ const ForgotPassword = () => {
   };
 
   const subtitleStyle = {
-    fontSize: '15px',
+    fontSize: isMobile ? '14px' : '15px',
     color: colors.textSecondary,
     margin: '0 0 32px 0',
     textAlign: 'center',

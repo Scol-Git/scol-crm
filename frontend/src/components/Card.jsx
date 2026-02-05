@@ -21,11 +21,13 @@ const Card = ({
   };
 
   const headerStyle = {
-    padding: '16px 24px',
+    padding: '16px 20px',
     borderBottom: `1px solid ${colors.borderLight}`,
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '12px',
   };
 
   const titleStyle = {

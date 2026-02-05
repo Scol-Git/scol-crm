@@ -20,9 +20,16 @@ const Applications = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
     loadApplications();
+
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
@@ -220,87 +227,91 @@ const Applications = () => {
       {/* Stats Cards */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-        gap: '16px',
+        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: isMobile ? '12px' : '16px',
         marginBottom: '24px'
       }}>
-        <Card padding="20px">
+        <Card padding={isMobile ? '16px' : '20px'}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              width: '40px',
-              height: '40px',
+              width: isMobile ? '36px' : '40px',
+              height: isMobile ? '36px' : '40px',
               borderRadius: '8px',
               backgroundColor: `${colors.info}15`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: colors.info,
+              flexShrink: 0,
             }}>
-              <FileText size={20} />
+              <FileText size={isMobile ? 18 : 20} />
             </div>
-            <div>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.total}</div>
-              <div style={{ fontSize: '13px', color: colors.textSecondary }}>Total Applications</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.total}</div>
+              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>Total Applications</div>
             </div>
           </div>
         </Card>
-        <Card padding="20px">
+        <Card padding={isMobile ? '16px' : '20px'}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              width: '40px',
-              height: '40px',
+              width: isMobile ? '36px' : '40px',
+              height: isMobile ? '36px' : '40px',
               borderRadius: '8px',
               backgroundColor: `${colors.warning}15`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: colors.warning,
+              flexShrink: 0,
             }}>
-              <Clock size={20} />
+              <Clock size={isMobile ? 18 : 20} />
             </div>
-            <div>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.pending}</div>
-              <div style={{ fontSize: '13px', color: colors.textSecondary }}>Pending Review</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.pending}</div>
+              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>Pending Review</div>
             </div>
           </div>
         </Card>
-        <Card padding="20px">
+        <Card padding={isMobile ? '16px' : '20px'}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              width: '40px',
-              height: '40px',
+              width: isMobile ? '36px' : '40px',
+              height: isMobile ? '36px' : '40px',
               borderRadius: '8px',
               backgroundColor: `${colors.success}15`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: colors.success,
+              flexShrink: 0,
             }}>
-              <CheckCircle size={20} />
+              <CheckCircle size={isMobile ? 18 : 20} />
             </div>
-            <div>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.accepted}</div>
-              <div style={{ fontSize: '13px', color: colors.textSecondary }}>Offers Received</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.accepted}</div>
+              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>Offers Received</div>
             </div>
           </div>
         </Card>
-        <Card padding="20px">
+        <Card padding={isMobile ? '16px' : '20px'}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              width: '40px',
-              height: '40px',
+              width: isMobile ? '36px' : '40px',
+              height: isMobile ? '36px' : '40px',
               borderRadius: '8px',
               backgroundColor: `${colors.brandPrimary}15`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: colors.brandPrimary,
+              flexShrink: 0,
             }}>
-              <GraduationCap size={20} />
+              <GraduationCap size={isMobile ? 18 : 20} />
             </div>
-            <div>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.enrolled}</div>
-              <div style={{ fontSize: '13px', color: colors.textSecondary }}>Enrolled</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.enrolled}</div>
+              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>Enrolled</div>
             </div>
           </div>
         </Card>
@@ -310,20 +321,26 @@ const Applications = () => {
       <div
         style={{
           display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
           justifyContent: 'space-between',
-          alignItems: 'center',
+          alignItems: isMobile ? 'stretch' : 'center',
           marginBottom: '24px',
-          gap: '16px',
+          gap: isMobile ? '12px' : '16px',
         }}
       >
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? '12px' : '16px',
+          alignItems: isMobile ? 'stretch' : 'center'
+        }}>
           <SearchInput
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by name, university, or course..."
-            style={{ width: '350px' }}
+            placeholder={isMobile ? "Search..." : "Search by name, university, or course..."}
+            style={{ width: isMobile ? '100%' : '350px' }}
           />
-          <div style={{ width: '200px' }}>
+          <div style={{ width: isMobile ? '100%' : '200px' }}>
             <Select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -332,20 +349,22 @@ const Applications = () => {
             />
           </div>
         </div>
-        <div style={{ color: colors.textSecondary, fontSize: '14px' }}>
+        <div style={{ color: colors.textSecondary, fontSize: '14px', textAlign: isMobile ? 'center' : 'right' }}>
           {filteredApplications.length} application(s)
         </div>
       </div>
 
       {/* Applications Table */}
       <Card padding="0">
-        <Table
-          columns={columns}
-          data={filteredApplications}
-          loading={loading}
-          onRowClick={(app) => navigate(`/applications/${app.id}`)}
-          emptyMessage="No applications found"
-        />
+        <div style={{ overflowX: 'auto' }}>
+          <Table
+            columns={columns}
+            data={filteredApplications}
+            loading={loading}
+            onRowClick={(app) => navigate(`/applications/${app.id}`)}
+            emptyMessage="No applications found"
+          />
+        </div>
       </Card>
     </div>
   );

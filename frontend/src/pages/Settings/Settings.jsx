@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Bell, Shield, Globe, Palette } from 'lucide-react';
 import { Card, Button, Input, Select } from '../../components';
 import { colors } from '../../theme';
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState('profile');
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [profileData, setProfileData] = useState({
     fullName: 'Admin User',
     email: 'admin@scolcrm.com',
@@ -12,6 +13,14 @@ const Settings = () => {
     timezone: 'UTC',
     language: 'en',
   });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const tabs = [
     { id: 'profile', label: 'Profile', icon: User },
@@ -22,26 +31,30 @@ const Settings = () => {
 
   const tabContainerStyle = {
     display: 'flex',
-    gap: '8px',
+    gap: isMobile ? '4px' : '8px',
     marginBottom: '24px',
     borderBottom: `1px solid ${colors.borderLight}`,
     paddingBottom: '0',
+    overflowX: 'auto',
+    WebkitOverflowScrolling: 'touch',
   };
 
   const getTabStyle = (isActive) => ({
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '12px 20px',
+    gap: isMobile ? '4px' : '8px',
+    padding: isMobile ? '10px 12px' : '12px 20px',
     border: 'none',
     backgroundColor: 'transparent',
     cursor: 'pointer',
-    fontSize: '14px',
+    fontSize: isMobile ? '13px' : '14px',
     fontWeight: isActive ? '600' : '500',
     color: isActive ? colors.brandPrimary : colors.textSecondary,
     borderBottom: isActive ? `2px solid ${colors.brandPrimary}` : '2px solid transparent',
     marginBottom: '-1px',
     transition: 'all 0.2s ease',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
   });
 
   const handleInputChange = (e) => {
@@ -65,15 +78,17 @@ const Settings = () => {
 
   const renderProfileSettings = () => (
     <Card title="Profile Information" subtitle="Update your personal information">
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', maxWidth: '600px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px', maxWidth: '600px' }}>
         <div style={{ gridColumn: '1 / -1' }}>
           <div style={{
             display: 'flex',
-            alignItems: 'center',
+            flexDirection: isMobile ? 'column' : 'row',
+            alignItems: isMobile ? 'center' : 'center',
             gap: '20px',
             marginBottom: '24px',
             paddingBottom: '24px',
             borderBottom: `1px solid ${colors.borderLight}`,
+            textAlign: isMobile ? 'center' : 'left',
           }}>
             <div style={{
               width: '80px',
@@ -86,6 +101,7 @@ const Settings = () => {
               color: '#fff',
               fontWeight: '700',
               fontSize: '28px',
+              flexShrink: 0,
             }}>
               A
             </div>
@@ -302,8 +318,8 @@ const Settings = () => {
               style={getTabStyle(activeTab === tab.id)}
               onClick={() => setActiveTab(tab.id)}
             >
-              <Icon size={18} />
-              {tab.label}
+              <Icon size={isMobile ? 16 : 18} />
+              <span>{tab.label}</span>
             </button>
           );
         })}

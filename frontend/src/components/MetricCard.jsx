@@ -5,28 +5,34 @@ const MetricCard = ({ title, value, icon: Icon, trend, color = colors.brandPrima
   const cardStyle = {
     backgroundColor: colors.contentSurface,
     borderRadius: '12px',
-    padding: '24px',
+    padding: '20px',
     boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
     border: `1px solid ${colors.borderLight}`,
     display: 'flex',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
+    minWidth: 0,
   };
 
   const contentStyle = {
     display: 'flex',
     flexDirection: 'column',
+    minWidth: 0,
+    flex: 1,
   };
 
   const titleStyle = {
-    fontSize: '14px',
+    fontSize: '13px',
     color: colors.textSecondary,
     marginBottom: '8px',
     fontWeight: '500',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   };
 
   const valueStyle = {
-    fontSize: '32px',
+    fontSize: '28px',
     fontWeight: '700',
     color: colors.textPrimary,
     lineHeight: 1,
@@ -42,14 +48,16 @@ const MetricCard = ({ title, value, icon: Icon, trend, color = colors.brandPrima
   };
 
   const iconContainerStyle = {
-    width: '48px',
-    height: '48px',
-    borderRadius: '12px',
+    width: '44px',
+    height: '44px',
+    borderRadius: '10px',
     backgroundColor: `${color}15`,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     color: color,
+    flexShrink: 0,
+    marginLeft: '12px',
   };
 
   return (
