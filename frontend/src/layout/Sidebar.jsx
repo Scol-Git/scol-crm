@@ -11,6 +11,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { colors } from '../theme';
+import logoWhite from '../assets/Logo/logo_white.png';
 
 const Sidebar = () => {
   const location = useLocation();
@@ -40,24 +41,10 @@ const Sidebar = () => {
     textDecoration: 'none',
   };
 
-  const logoIconStyle = {
-    width: '40px',
-    height: '40px',
-    backgroundColor: colors.brandPrimary,
-    borderRadius: '10px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: '18px',
-  };
-
-  const logoTextStyle = {
-    color: colors.textLight,
-    fontSize: '20px',
-    fontWeight: '700',
-    letterSpacing: '-0.5px',
+  const logoImageStyle = {
+    height: '60px',
+    width: 'auto',
+    objectFit: 'contain',
   };
 
   const navStyle = {
@@ -97,8 +84,7 @@ const Sidebar = () => {
     <div style={sidebarStyle}>
       <div style={logoContainerStyle}>
         <div style={logoStyle}>
-          <div style={logoIconStyle}>S</div>
-          <span style={logoTextStyle}>SCOL CRM</span>
+          <img src={logoWhite} alt="SCOL CRM" style={logoImageStyle} />
         </div>
       </div>
 

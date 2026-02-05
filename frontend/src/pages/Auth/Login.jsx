@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, Phone } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../theme';
+import logoWhite from '../../assets/Logo/logo_white.png';
+import logoRed from '../../assets/Logo/logo_red.png';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -194,10 +196,11 @@ const Login = () => {
       {/* Left Panel - Branding */}
       <div style={leftPanelStyle}>
         <div style={{ textAlign: 'center', zIndex: 1 }}>
-          <div style={{ ...logoIconStyle, width: '80px', height: '80px', fontSize: '36px', margin: '0 auto 24px' }}>
-            S
-          </div>
-          <h1 style={{ color: '#FFFFFF', fontSize: '36px', margin: '0 0 16px 0' }}>SCOL CRM</h1>
+          <img
+            src={logoWhite}
+            alt="SCOL CRM"
+            style={{ height: '80px', width: 'auto', objectFit: 'contain', margin: '0 auto 40px' }}
+          />
           <p style={{ color: colors.textMuted, fontSize: '18px', maxWidth: '400px', lineHeight: 1.6 }}>
             Student Counseling & Overseas Learning - Your complete solution for managing student leads and university applications.
           </p>
@@ -229,8 +232,11 @@ const Login = () => {
       <div style={rightPanelStyle}>
         <div style={formContainerStyle}>
           <div style={logoStyle}>
-            <div style={logoIconStyle}>S</div>
-            <span style={{ fontSize: '24px', fontWeight: '700', color: colors.textPrimary }}>SCOL CRM</span>
+            <img
+              src={logoRed}
+              alt="SCOL CRM"
+              style={{ height: '64px', width: 'auto', objectFit: 'contain' }}
+            />
           </div>
 
           <h2 style={titleStyle}>Welcome back</h2>

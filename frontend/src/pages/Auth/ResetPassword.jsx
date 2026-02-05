@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Lock, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { authService } from '../../services/authService';
 import { colors } from '../../theme';
+import logoRed from '../../assets/Logo/logo_red.png';
 
 const ResetPassword = () => {
   const navigate = useNavigate();
@@ -294,8 +295,11 @@ const ResetPassword = () => {
       <div style={containerStyle}>
         <div style={cardStyle}>
           <div style={logoStyle}>
-            <div style={logoIconStyle}>S</div>
-            <span style={{ fontSize: '24px', fontWeight: '700', color: colors.textPrimary }}>SCOL CRM</span>
+            <img
+              src={logoRed}
+              alt="SCOL CRM"
+              style={{ height: '64px', width: 'auto', objectFit: 'contain' }}
+            />
           </div>
           <div style={successStyle}>
             <CheckCircle size={48} style={{ marginBottom: '16px' }} />
@@ -311,8 +315,11 @@ const ResetPassword = () => {
     <div style={containerStyle}>
       <div style={cardStyle}>
         <div style={logoStyle}>
-          <div style={logoIconStyle}>S</div>
-          <span style={{ fontSize: '24px', fontWeight: '700', color: colors.textPrimary }}>SCOL CRM</span>
+          <img
+            src={logoRed}
+            alt="SCOL CRM"
+            style={{ height: '64px', width: 'auto', objectFit: 'contain' }}
+          />
         </div>
 
         {/* Step Indicator */}

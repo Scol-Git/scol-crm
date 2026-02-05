@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Phone, ArrowLeft } from 'lucide-react';
 import { authService } from '../../services/authService';
 import { colors } from '../../theme';
+import logoRed from '../../assets/Logo/logo_red.png';
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
@@ -188,8 +189,11 @@ const ForgotPassword = () => {
     <div style={containerStyle}>
       <div style={cardStyle}>
         <div style={logoStyle}>
-          <div style={logoIconStyle}>S</div>
-          <span style={{ fontSize: '24px', fontWeight: '700', color: colors.textPrimary }}>SCOL CRM</span>
+          <img
+            src={logoRed}
+            alt="SCOL CRM"
+            style={{ height: '64px', width: 'auto', objectFit: 'contain' }}
+          />
         </div>
 
         <h2 style={titleStyle}>Forgot Password?</h2>
