@@ -36,9 +36,12 @@ const MainLayout = () => {
   const getPageTitle = () => {
     const path = location.pathname;
     if (path === '/dashboard' || path === '/') return 'Dashboard';
-    if (path.startsWith('/leads')) return 'Lead Management';
+    if (path.startsWith('/leads')) return 'Leads';
+    if (path.startsWith('/applications')) return 'Applications';
     if (path.startsWith('/universities')) return 'Universities';
     if (path.startsWith('/courses')) return 'Courses';
+    if (path.startsWith('/tasks')) return 'Tasks';
+    if (path.startsWith('/reports')) return 'Reports';
     if (path.startsWith('/settings')) return 'Settings';
     return 'SCOL CRM';
   };
