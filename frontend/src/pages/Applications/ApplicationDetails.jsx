@@ -126,6 +126,8 @@ const ApplicationDetails = () => {
           cursor: 'pointer',
           marginBottom: '24px',
           fontSize: '14px',
+          fontFamily: 'inherit',
+          padding: 0,
         }}
       >
         <ArrowLeft size={18} />

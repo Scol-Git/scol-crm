@@ -10,6 +10,8 @@ const Button = ({
   type = 'button',
   icon: Icon,
   className = '',
+  style: customStyle = {},
+  fullWidth = false,
   ...props
 }) => {
   const baseStyles = {
@@ -20,9 +22,12 @@ const Button = ({
     border: 'none',
     borderRadius: '8px',
     fontWeight: '500',
+    fontFamily: 'inherit',
     cursor: disabled ? 'not-allowed' : 'pointer',
     transition: 'all 0.2s ease',
     opacity: disabled ? 0.6 : 1,
+    width: fullWidth ? '100%' : 'auto',
+    boxSizing: 'border-box',
   };
 
   const variants = {
@@ -64,6 +69,7 @@ const Button = ({
     ...baseStyles,
     ...variants[variant],
     ...sizes[size],
+    ...customStyle,
   };
 
   return (

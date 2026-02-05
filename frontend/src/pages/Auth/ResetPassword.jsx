@@ -233,6 +233,7 @@ const ResetPassword = () => {
     cursor: 'pointer',
     color: colors.textMuted,
     padding: '4px',
+    fontFamily: 'inherit',
   };
 
   const buttonStyle = {
@@ -247,6 +248,7 @@ const ResetPassword = () => {
     cursor: loading ? 'not-allowed' : 'pointer',
     opacity: loading ? 0.7 : 1,
     transition: 'all 0.2s ease',
+    fontFamily: 'inherit',
   };
 
   const errorStyle = {

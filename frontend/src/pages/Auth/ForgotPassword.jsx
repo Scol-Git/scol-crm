@@ -152,6 +152,7 @@ const ForgotPassword = () => {
     cursor: loading ? 'not-allowed' : 'pointer',
     opacity: loading ? 0.7 : 1,
     transition: 'all 0.2s ease',
+    fontFamily: 'inherit',
   };
 
   const errorStyle = {
@@ -189,6 +190,8 @@ const ForgotPassword = () => {
     backgroundColor: isActive ? colors.brandPrimary : 'transparent',
     color: isActive ? '#FFFFFF' : colors.textSecondary,
     fontWeight: '500',
+    fontSize: '14px',
+    fontFamily: 'inherit',
     cursor: 'pointer',
     borderRadius: '8px',
     transition: 'all 0.2s ease',

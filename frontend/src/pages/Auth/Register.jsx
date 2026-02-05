@@ -209,6 +209,7 @@ const Register = () => {
     cursor: 'pointer',
     color: colors.textMuted,
     padding: '4px',
+    fontFamily: 'inherit',
   };
 
   const buttonStyle = {
@@ -224,6 +225,7 @@ const Register = () => {
     opacity: loading ? 0.7 : 1,
     transition: 'all 0.2s ease',
     marginTop: '8px',
+    fontFamily: 'inherit',
   };
 
   const errorStyle = {

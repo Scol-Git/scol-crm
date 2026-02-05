@@ -35,8 +35,7 @@ const Settings = () => {
     marginBottom: '24px',
     borderBottom: `1px solid ${colors.borderLight}`,
     paddingBottom: '0',
-    overflowX: 'auto',
-    WebkitOverflowScrolling: 'touch',
+    flexWrap: isMobile ? 'wrap' : 'nowrap',
   };
 
   const getTabStyle = (isActive) => ({
@@ -49,12 +48,12 @@ const Settings = () => {
     cursor: 'pointer',
     fontSize: isMobile ? '13px' : '14px',
     fontWeight: isActive ? '600' : '500',
+    fontFamily: 'inherit',
     color: isActive ? colors.brandPrimary : colors.textSecondary,
     borderBottom: isActive ? `2px solid ${colors.brandPrimary}` : '2px solid transparent',
     marginBottom: '-1px',
     transition: 'all 0.2s ease',
     whiteSpace: 'nowrap',
-    flexShrink: 0,
   });
 
   const handleInputChange = (e) => {
@@ -276,6 +275,8 @@ const Settings = () => {
                   backgroundColor: theme === 'Light' ? `${colors.brandPrimary}10` : 'transparent',
                   cursor: 'pointer',
                   fontWeight: '500',
+                  fontFamily: 'inherit',
+                  fontSize: '14px',
                   color: theme === 'Light' ? colors.brandPrimary : colors.textSecondary,
                 }}
               >

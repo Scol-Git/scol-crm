@@ -227,6 +227,7 @@ const VerifyOtp = () => {
     cursor: loading ? 'not-allowed' : 'pointer',
     opacity: loading ? 0.7 : 1,
     transition: 'all 0.2s ease',
+    fontFamily: 'inherit',
   };
 
   const errorStyle = {
@@ -262,6 +263,7 @@ const VerifyOtp = () => {
     background: 'none',
     border: 'none',
     fontSize: '14px',
+    fontFamily: 'inherit',
   };
 
   const maskedPhone = phone?.replace(/(\d{3})\d{4}(\d{3})/, '$1****$2') || '';

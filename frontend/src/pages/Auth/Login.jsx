@@ -161,6 +161,7 @@ const Login = () => {
     cursor: 'pointer',
     color: colors.textMuted,
     padding: '4px',
+    fontFamily: 'inherit',
   };
 
   const buttonStyle = {
@@ -176,6 +177,7 @@ const Login = () => {
     opacity: loading ? 0.7 : 1,
     transition: 'all 0.2s ease',
     marginTop: '8px',
+    fontFamily: 'inherit',
   };
 
   const errorStyle = {
@@ -200,6 +202,8 @@ const Login = () => {
     backgroundColor: isActive ? colors.brandPrimary : 'transparent',
     color: isActive ? '#FFFFFF' : colors.textSecondary,
     fontWeight: '500',
+    fontSize: '14px',
+    fontFamily: 'inherit',
     cursor: 'pointer',
     borderRadius: '8px',
     transition: 'all 0.2s ease',

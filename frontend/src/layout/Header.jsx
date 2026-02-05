@@ -134,6 +134,7 @@ const Header = ({ title, onMenuClick, isMobile }) => {
     color: colors.textLight,
     cursor: 'pointer',
     borderRadius: '8px',
+    fontFamily: 'inherit',
   };
 
   const titleStyle = {
@@ -189,6 +190,7 @@ const Header = ({ title, onMenuClick, isMobile }) => {
     justifyContent: 'center',
     transition: 'all 0.2s ease',
     position: 'relative',
+    fontFamily: 'inherit',
   };
 
   const notificationBadgeStyle = {
