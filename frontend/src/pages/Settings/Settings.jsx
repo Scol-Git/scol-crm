@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Bell, Shield, Globe, Palette } from 'lucide-react';
+import { User, Bell, Shield, Globe, Palette, Users, Plus } from 'lucide-react';
 import { Card, Button, Input, Select } from '../../components';
 import { colors } from '../../theme';
 
@@ -27,6 +27,7 @@ const Settings = () => {
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'preferences', label: 'Preferences', icon: Palette },
+    { id: 'roles', label: 'Roles Management', icon: Users },
   ];
 
   const tabContainerStyle = {
@@ -292,6 +293,55 @@ const Settings = () => {
     </Card>
   );
 
+  const renderRolesSettings = () => (
+    <Card title="Roles & Permissions" subtitle="Manage system roles and users">
+      <div style={{ maxWidth: '800px' }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '24px',
+        }}>
+          <div>
+            <h4 style={{ margin: '0 0 8px 0', color: colors.textPrimary }}>System Roles</h4>
+            <p style={{ margin: 0, color: colors.textSecondary, fontSize: '14px' }}>
+              Assign roles to control user access.
+            </p>
+          </div>
+          <Button icon={Plus}>Add Role</Button>
+        </div>
+
+        <div style={{ display: 'grid', gap: '16px' }}>
+          {[
+            { name: 'Admin', description: 'Full access to all modules and system settings.', users: 3 },
+            { name: 'Data Manager', description: 'Can add, edit, and safely manage CRM application data.', users: 5 },
+          ].map((role, idx) => (
+            <div key={idx} style={{
+              padding: '20px',
+              border: `1px solid ${colors.borderLight}`,
+              backgroundColor: colors.appBg,
+              borderRadius: '8px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}>
+              <div>
+                <h4 style={{ margin: '0 0 4px 0', color: colors.textPrimary, fontSize: '16px' }}>{role.name}</h4>
+                <div style={{ fontSize: '13px', color: colors.textSecondary }}>{role.description}</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <span style={{ fontSize: '13px', color: colors.textSecondary, fontWeight: '500' }}>
+                  {role.users} Users
+                </span>
+                <Button variant="ghost" size="small">Edit</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+
   const renderContent = () => {
     switch (activeTab) {
       case 'profile':
@@ -302,6 +352,8 @@ const Settings = () => {
         return renderSecuritySettings();
       case 'preferences':
         return renderPreferencesSettings();
+      case 'roles':
+        return renderRolesSettings();
       default:
         return renderProfileSettings();
     }

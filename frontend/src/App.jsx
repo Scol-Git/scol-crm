@@ -9,7 +9,6 @@ import {
   LeadDetails,
   UniversityList,
   UniversityDetails,
-  Courses,
   Settings,
   Applications,
   ApplicationDetails,
@@ -46,7 +45,6 @@ function App() {
             <Route path="leads/:id" element={<LeadDetails />} />
             <Route path="universities" element={<UniversityList />} />
             <Route path="universities/:id" element={<UniversityDetails />} />
-            <Route path="courses" element={<Courses />} />
             <Route path="applications" element={<Applications />} />
             <Route path="applications/:id" element={<ApplicationDetails />} />
             <Route path="tasks" element={<Tasks />} />

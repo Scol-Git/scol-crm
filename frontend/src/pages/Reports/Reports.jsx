@@ -8,7 +8,7 @@ import {
   Download,
   Calendar,
 } from 'lucide-react';
-import { Card, Button, Select, MetricCard } from '../../components';
+import { Card, Button, Input, MetricCard } from '../../components';
 import { reportService } from '../../services';
 import { colors } from '../../theme';
 
@@ -17,7 +17,7 @@ const Reports = () => {
   const [countryStats, setCountryStats] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState('6months');
+  const [dateFilters, setDateFilters] = useState({ dateFrom: '', dateTo: '' });
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
@@ -28,14 +28,15 @@ const Reports = () => {
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [dateFilters]);
 
   const loadReports = async () => {
     try {
+      setLoading(true);
       const [monthly, countries, summaryData] = await Promise.all([
-        reportService.getMonthlyStats(),
-        reportService.getCountryStats(),
-        reportService.getSummary(),
+        reportService.getMonthlyStats(dateFilters),
+        reportService.getCountryStats(dateFilters),
+        reportService.getSummary(dateFilters),
       ]);
       setMonthlyStats(monthly);
       setCountryStats(countries);
@@ -87,19 +88,28 @@ const Reports = () => {
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
           gap: '12px',
-          alignItems: isMobile ? 'stretch' : 'center'
+          alignItems: isMobile ? 'stretch' : 'flex-end'
         }}>
-          <div style={{ width: isMobile ? '100%' : '180px' }}>
-            <Select
-              value={dateRange}
-              onChange={(e) => setDateRange(e.target.value)}
-              options={[
-                { value: '3months', label: 'Last 3 Months' },
-                { value: '6months', label: 'Last 6 Months' },
-                { value: '12months', label: 'Last 12 Months' },
-                { value: 'ytd', label: 'Year to Date' },
-              ]}
-            />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: colors.textSecondary }}>
+              <span style={{ fontSize: '13px', fontWeight: '500' }}>Date Range:</span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <Input
+                type="date"
+                placeholder="From Date"
+                value={dateFilters.dateFrom}
+                onChange={(e) => setDateFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                containerStyle={{ flex: 1, marginBottom: 0 }}
+              />
+              <Input
+                type="date"
+                placeholder="To Date"
+                value={dateFilters.dateTo}
+                onChange={(e) => setDateFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                containerStyle={{ flex: 1, marginBottom: 0 }}
+              />
+            </div>
           </div>
           <Button variant="secondary" icon={Download} style={{ width: isMobile ? '100%' : 'auto' }}>
             Export Report

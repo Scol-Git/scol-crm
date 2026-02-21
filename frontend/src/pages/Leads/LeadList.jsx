@@ -22,7 +22,16 @@ const LeadList = () => {
     address: '',
     city: '',
     gender: '',
-    targetUniversity: '',
+    targetCountry: '',
+    consultantName: '',
+    englishTestPassed: 'false',
+  });
+  const [filters, setFilters] = useState({
+    dateFrom: '',
+    dateTo: '',
+    status: '',
+    country: '',
+    englishTest: '',
   });
   const [errors, setErrors] = useState({});
 
@@ -53,20 +62,50 @@ const LeadList = () => {
   };
 
   const filterLeads = () => {
-    if (!searchQuery.trim()) {
-      setFilteredLeads(leads);
-      return;
+    let filtered = leads;
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (lead) => {
+          if (!lead) return false;
+          return (
+            lead.fullName?.toLowerCase().includes(query) ||
+            lead.email?.toLowerCase().includes(query) ||
+            lead.phone?.includes(query)
+          );
+        }
+      );
     }
 
-    const query = searchQuery.toLowerCase();
-    const filtered = leads.filter(
-      (lead) =>
-        lead.fullName?.toLowerCase().includes(query) ||
-        lead.email?.toLowerCase().includes(query) ||
-        lead.phone?.includes(query)
-    );
+    if (filters.dateFrom) {
+      filtered = filtered.filter((lead) => new Date(lead.createdAt) >= new Date(filters.dateFrom));
+    }
+
+    if (filters.dateTo) {
+      // Add one day to include the whole 'dateTo' day
+      const toDate = new Date(filters.dateTo);
+      toDate.setDate(toDate.getDate() + 1);
+      filtered = filtered.filter((lead) => lead && new Date(lead.createdAt) < toDate);
+    }
+
+    if (filters.status) {
+      filtered = filtered.filter(lead => lead && lead.status === filters.status);
+    }
+    if (filters.country) {
+      filtered = filtered.filter(lead => lead && lead.targetCountry === filters.country);
+    }
+    if (filters.englishTest) {
+      const isPassed = filters.englishTest === 'true';
+      filtered = filtered.filter(lead => lead && !!lead.englishTestPassed === isPassed);
+    }
+
     setFilteredLeads(filtered);
   };
+
+  useEffect(() => {
+    filterLeads();
+  }, [searchQuery, leads, filters]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -125,8 +164,10 @@ const LeadList = () => {
       address: lead.address || '',
       city: lead.city || '',
       gender: lead.gender || '',
-      targetUniversity: lead.targetUniversity || '',
-      status: lead.status || 'new',
+      targetCountry: lead.targetCountry || '',
+      consultantName: lead.consultantName || '',
+      englishTestPassed: lead.englishTestPassed ? 'true' : 'false',
+      status: lead.status || 'eligible',
     });
     setShowEditModal(true);
   };
@@ -139,7 +180,9 @@ const LeadList = () => {
       address: '',
       city: '',
       gender: '',
-      targetUniversity: '',
+      targetCountry: '',
+      consultantName: '',
+      englishTestPassed: 'false',
     });
     setErrors({});
     setSelectedLead(null);
@@ -242,12 +285,26 @@ const LeadList = () => {
     {
       title: 'Status',
       dataIndex: 'status',
-      render: (value) => <Badge variant={value}>{value}</Badge>,
+      render: (value) => <Badge variant={value} style={{ textTransform: 'capitalize' }}>{value}</Badge>,
     },
     {
-      title: 'Target University',
-      dataIndex: 'targetUniversity',
+      title: 'Target Country',
+      dataIndex: 'targetCountry',
       render: (value) => value || '-',
+    },
+    {
+      title: 'Consultant',
+      dataIndex: 'consultantName',
+      render: (value) => value || '-',
+    },
+    {
+      title: 'English Test',
+      dataIndex: 'englishTestPassed',
+      render: (value) => (
+        <Badge variant={value ? 'success' : 'error'}>
+          {value ? 'Passed' : 'No'}
+        </Badge>
+      ),
     },
     {
       title: 'Actions',
@@ -300,11 +357,16 @@ const LeadList = () => {
   ];
 
   const statusOptions = [
-    { value: 'new', label: 'New' },
-    { value: 'contacted', label: 'Contacted' },
-    { value: 'qualified', label: 'Qualified' },
-    { value: 'enrolled', label: 'Enrolled' },
-    { value: 'lost', label: 'Lost' },
+    { value: 'eligible', label: 'Eligible' },
+    { value: 'not eligible', label: 'Not Eligible' },
+    { value: 'unreachable', label: 'Unreachable' },
+    { value: 'visited', label: 'Visited' },
+    { value: 'applied', label: 'Applied' },
+  ];
+
+  const booleanOptions = [
+    { value: 'true', label: 'Yes' },
+    { value: 'false', label: 'No' },
   ];
 
   return (
@@ -329,6 +391,73 @@ const LeadList = () => {
         <Button icon={Plus} onClick={() => setShowAddModal(true)} style={{ width: isMobile ? '100%' : 'auto' }}>
           Add Lead
         </Button>
+      </div>
+
+      {/* Filter Bar */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(150px, 1fr))',
+        gap: '12px',
+        marginBottom: '24px',
+        backgroundColor: colors.appBg,
+        padding: '16px',
+        borderRadius: '12px',
+        border: `1px solid ${colors.borderLight}`
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: isMobile ? '1 / -1' : 'span 2' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: colors.textSecondary }}>
+            <span style={{ fontSize: '13px', fontWeight: '500' }}>Date Range:</span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Input
+              type="date"
+              placeholder="From Date"
+              value={filters.dateFrom}
+              onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+              containerStyle={{ flex: 1, marginBottom: 0 }}
+            />
+            <Input
+              type="date"
+              placeholder="To Date"
+              value={filters.dateTo}
+              onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+              containerStyle={{ flex: 1, marginBottom: 0 }}
+            />
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <span style={{ fontSize: '13px', fontWeight: '500', color: colors.textSecondary }}>Status</span>
+          <Select
+            value={filters.status}
+            onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+            options={[{ value: '', label: 'All Statuses' }, ...statusOptions]}
+            containerStyle={{ marginBottom: 0 }}
+          />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <span style={{ fontSize: '13px', fontWeight: '500', color: colors.textSecondary }}>Target Country</span>
+          <Select
+            value={filters.country}
+            onChange={(e) => setFilters(prev => ({ ...prev, country: e.target.value }))}
+            options={[
+              { value: '', label: 'All Countries' },
+              { value: 'United Kingdom', label: 'United Kingdom' },
+              { value: 'United States', label: 'United States' },
+              { value: 'Canada', label: 'Canada' },
+              { value: 'Australia', label: 'Australia' }
+            ]}
+            containerStyle={{ marginBottom: 0 }}
+          />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <span style={{ fontSize: '13px', fontWeight: '500', color: colors.textSecondary }}>English Test</span>
+          <Select
+            value={filters.englishTest}
+            onChange={(e) => setFilters(prev => ({ ...prev, englishTest: e.target.value }))}
+            options={[{ value: '', label: 'English Test: Any' }, ...booleanOptions]}
+            containerStyle={{ marginBottom: 0 }}
+          />
+        </div>
       </div>
 
       {/* Leads Table */}
@@ -417,11 +546,25 @@ const LeadList = () => {
             placeholder="Select gender"
           />
           <Input
-            label="Target University"
-            name="targetUniversity"
-            value={formData.targetUniversity}
+            label="Target Country"
+            name="targetCountry"
+            value={formData.targetCountry}
             onChange={handleInputChange}
-            placeholder="Enter target university"
+            placeholder="Enter target country"
+          />
+          <Input
+            label="Consultant Name"
+            name="consultantName"
+            value={formData.consultantName}
+            onChange={handleInputChange}
+            placeholder="Enter consultant name"
+          />
+          <Select
+            label="English Test Passed"
+            name="englishTestPassed"
+            value={formData.englishTestPassed}
+            onChange={handleInputChange}
+            options={booleanOptions}
           />
         </div>
       </Modal>
@@ -507,15 +650,29 @@ const LeadList = () => {
             placeholder="Select status"
           />
           <Input
-            label="Target University"
-            name="targetUniversity"
-            value={formData.targetUniversity}
+            label="Target Country"
+            name="targetCountry"
+            value={formData.targetCountry}
             onChange={handleInputChange}
-            placeholder="Enter target university"
+            placeholder="Enter target country"
+          />
+          <Input
+            label="Consultant Name"
+            name="consultantName"
+            value={formData.consultantName}
+            onChange={handleInputChange}
+            placeholder="Enter consultant name"
+          />
+          <Select
+            label="English Test Passed"
+            name="englishTestPassed"
+            value={formData.englishTestPassed}
+            onChange={handleInputChange}
+            options={booleanOptions}
           />
         </div>
       </Modal>
-    </div>
+    </div >
   );
 };
 

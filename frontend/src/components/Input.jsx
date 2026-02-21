@@ -12,10 +12,13 @@ const Input = ({
   error,
   name,
   id,
+  style,
+  containerStyle: customContainerStyle,
   ...props
 }) => {
   const containerStyle = {
-    marginBottom: '16px',
+    marginBottom: customContainerStyle?.marginBottom !== undefined ? customContainerStyle.marginBottom : '16px',
+    ...customContainerStyle,
   };
 
   const labelStyle = {
@@ -37,6 +40,7 @@ const Input = ({
     backgroundColor: disabled ? colors.appBg : colors.contentSurface,
     color: colors.textPrimary,
     boxSizing: 'border-box',
+    ...style,
   };
 
   const errorStyle = {

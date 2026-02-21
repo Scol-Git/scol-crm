@@ -149,9 +149,9 @@ export const reportService = {
   async getSummary() {
     await delay();
     const totalApplications = applications.length;
-    const accepted = applications.filter(a => ['accepted', 'enrolled', 'visa_processing'].includes(a.status)).length;
-    const enrolled = applications.filter(a => a.status === 'enrolled').length;
-    const pending = applications.filter(a => ['submitted', 'under_review', 'conditional_offer'].includes(a.status)).length;
+    const accepted = applications.filter(a => ['Unconditional offer', 'Enrolled', 'VISA', 'Conditional offer'].includes(a.status)).length;
+    const enrolled = applications.filter(a => a.status === 'Enrolled').length;
+    const pending = applications.filter(a => ['Application Submitted', 'Pending Review', 'Interview', 'Payment', 'CAS/COE/120'].includes(a.status)).length;
     const totalRevenue = monthlyStats.reduce((sum, m) => sum + m.revenue, 0);
 
     return {
