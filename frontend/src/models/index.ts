@@ -23,6 +23,9 @@ export interface SysLeadProfile {
   address: string | null;
   city: string | null;
   imgUrl: string | null;
+  consultantName: string | null;
+  targetCountry: string | null;
+  englishTestPassed: boolean | null;
 }
 
 export interface SysAcademicDegree {
@@ -245,8 +248,46 @@ export interface LeadWithDetails extends SysLeadProfile {
   englishTestResults?: LeadEnglishTestResult[];
   preferredCountries?: SysCountry[];
   preferredPrograms?: SysProgramme[];
-  status?: 'new' | 'contacted' | 'qualified' | 'enrolled' | 'lost';
-  targetUniversity?: string;
+  status?: 'eligible' | 'not eligible' | 'unreachable' | 'visited' | 'applied';
+}
+
+export interface DetailedCourse {
+  id: string;
+  uniId: string;
+  uniName: string;
+  programmeName: string;
+  courseName: string;
+  degreeName: string;
+  minDegreeName: string;
+  higherDegreeName: string | null;
+  minGpa: number | null;
+  higherGpa: number | null;
+
+  tuitionFee: number | null;
+  currency: string | null;
+  initialDeposit: number | null;
+  applicationFee: number | null;
+
+  intakeInfo: string;
+  courseDuration: string; // e.g., '1 year', '36 months'
+  applicationDeadline: string | null;
+  isActive: boolean;
+
+  // Test Requirements
+  ieltsMinOverall: number | null;
+  ieltsMinSection: number | null;
+  toeflMinOverall: number | null;
+  toeflMinSection: number | null;
+  pteMinOverall: number | null;
+  pteMinSection: number | null;
+  OIETCMinOverall: number | null;
+  OIETCMinSection: number | null;
+
+  // Scholarship Data
+  scholarshipName: string | null;
+  scholarshipMaxAmount: number | null;
+  scholarshipCriteriaJson: string | null;
+  scholarshipIsActive: boolean;
 }
 
 export interface UniversityWithDetails extends SysUniversity {

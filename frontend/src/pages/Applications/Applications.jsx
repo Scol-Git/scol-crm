@@ -9,7 +9,7 @@ import {
   Eye,
   GraduationCap
 } from 'lucide-react';
-import { Card, Table, Badge, SearchInput, Button, Select } from '../../components';
+import { Card, Table, Badge, SearchInput, Button, Select, Modal, Input } from '../../components';
 import { applicationService } from '../../services';
 import { colors } from '../../theme';
 
@@ -20,6 +20,10 @@ const Applications = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [dateFilters, setDateFilters] = useState({ dateFrom: '', dateTo: '' });
+  const [showAddNoteModal, setShowAddNoteModal] = useState(false);
+  const [selectedApplicationId, setSelectedApplicationId] = useState(null);
+  const [noteContent, setNoteContent] = useState('');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
@@ -34,7 +38,7 @@ const Applications = () => {
 
   useEffect(() => {
     filterApplications();
-  }, [searchQuery, statusFilter, applications]);
+  }, [searchQuery, statusFilter, dateFilters, applications]);
 
   const loadApplications = async () => {
     try {
@@ -65,7 +69,26 @@ const Applications = () => {
       filtered = filtered.filter((app) => app.status === statusFilter);
     }
 
+    if (dateFilters.dateFrom) {
+      filtered = filtered.filter((app) => new Date(app.appliedDate) >= new Date(dateFilters.dateFrom));
+    }
+
+    if (dateFilters.dateTo) {
+      const toDate = new Date(dateFilters.dateTo);
+      toDate.setDate(toDate.getDate() + 1);
+      filtered = filtered.filter((app) => new Date(app.appliedDate) < toDate);
+    }
+
     setFilteredApplications(filtered);
+  };
+
+  const handleSaveNote = () => {
+    if (!noteContent.trim()) return;
+    console.log('Saving note for app', selectedApplicationId, noteContent);
+    // Here you would typically call applicationService.addNote or similar
+    setShowAddNoteModal(false);
+    setNoteContent('');
+    setSelectedApplicationId(null);
   };
 
   const getStatusIcon = (status) => {
@@ -116,6 +139,12 @@ const Applications = () => {
 
   const columns = [
     {
+      title: <input type="checkbox" style={{ cursor: 'pointer' }} />,
+      dataIndex: 'id',
+      render: () => <input type="checkbox" style={{ cursor: 'pointer' }} onClick={(e) => e.stopPropagation()} />,
+      width: '40px',
+    },
+    {
       title: 'Applicant',
       dataIndex: 'lead',
       render: (lead) => (
@@ -163,6 +192,11 @@ const Applications = () => {
       ),
     },
     {
+      title: 'Consultant Name',
+      dataIndex: 'lead',
+      render: (lead) => lead?.consultantName || '-',
+    },
+    {
       title: 'Applied Date',
       dataIndex: 'appliedDate',
       render: (value) => value ? new Date(value).toLocaleDateString() : '-',
@@ -188,30 +222,55 @@ const Applications = () => {
       title: 'Actions',
       dataIndex: 'id',
       render: (id, row) => (
-        <Button
-          variant="ghost"
-          size="small"
-          icon={Eye}
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/applications/${id}`);
-          }}
-        >
-          View
-        </Button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <Button
+            variant="ghost"
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedApplicationId(id);
+              setShowAddNoteModal(true);
+            }}
+          >
+            Add Note
+          </Button>
+          <Button
+            variant="ghost"
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation();
+              // Update status functionality can be built similarly
+              console.log('Update Status for', id);
+            }}
+          >
+            Update Status
+          </Button>
+          <Button
+            variant="ghost"
+            size="small"
+            icon={Eye}
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/applications/${id}`);
+            }}
+          >
+            View
+          </Button>
+        </div>
       ),
     },
   ];
 
   const statusOptions = [
-    { value: 'draft', label: 'Draft' },
-    { value: 'submitted', label: 'Submitted' },
-    { value: 'under_review', label: 'Under Review' },
-    { value: 'conditional_offer', label: 'Conditional Offer' },
-    { value: 'accepted', label: 'Accepted' },
-    { value: 'rejected', label: 'Rejected' },
-    { value: 'visa_processing', label: 'Visa Processing' },
-    { value: 'enrolled', label: 'Enrolled' },
+    { value: 'Pending Review', label: 'Pending Review' },
+    { value: 'Application Submitted', label: 'Application Submitted' },
+    { value: 'Conditional offer', label: 'Conditional offer' },
+    { value: 'Unconditional offer', label: 'Unconditional offer' },
+    { value: 'Interview', label: 'Interview' },
+    { value: 'Payment', label: 'Payment' },
+    { value: 'CAS/COE/120', label: 'CAS/COE/120' },
+    { value: 'VISA', label: 'VISA' },
+    { value: 'Enrolled', label: 'Enrolled' },
   ];
 
   // Calculate stats
@@ -290,7 +349,7 @@ const Applications = () => {
             </div>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.accepted}</div>
-              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>Offers Received</div>
+              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>Application Submitted</div>
             </div>
           </div>
         </Card>
@@ -311,7 +370,7 @@ const Applications = () => {
             </div>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.enrolled}</div>
-              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>Enrolled</div>
+              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>Pending Documents</div>
             </div>
           </div>
         </Card>
@@ -332,7 +391,8 @@ const Applications = () => {
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
           gap: isMobile ? '12px' : '16px',
-          alignItems: isMobile ? 'stretch' : 'center'
+          alignItems: isMobile ? 'stretch' : 'center',
+          flexWrap: 'wrap'
         }}>
           <SearchInput
             value={searchQuery}
@@ -344,8 +404,24 @@ const Applications = () => {
             <Select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              options={statusOptions}
+              options={[{ value: '', label: 'All Statuses' }, ...statusOptions]}
               placeholder="Filter by status"
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '8px', width: isMobile ? '100%' : 'auto' }}>
+            <Input
+              type="date"
+              placeholder="From Date"
+              value={dateFilters.dateFrom}
+              onChange={(e) => setDateFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+              containerStyle={{ flex: 1, marginBottom: 0 }}
+            />
+            <Input
+              type="date"
+              placeholder="To Date"
+              value={dateFilters.dateTo}
+              onChange={(e) => setDateFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+              containerStyle={{ flex: 1, marginBottom: 0 }}
             />
           </div>
         </div>
@@ -366,6 +442,49 @@ const Applications = () => {
           />
         </div>
       </Card>
+
+      {/* Add Note Modal */}
+      <Modal
+        isOpen={showAddNoteModal}
+        onClose={() => {
+          setShowAddNoteModal(false);
+          setNoteContent('');
+        }}
+        title="Add Application Note"
+        size="small"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => {
+              setShowAddNoteModal(false);
+              setNoteContent('');
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveNote}>Save Note</Button>
+          </>
+        }
+      >
+        <div style={{ padding: '16px 0' }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: colors.textPrimary, fontWeight: '500' }}>
+            Note Content
+          </label>
+          <textarea
+            value={noteContent}
+            onChange={(e) => setNoteContent(e.target.value)}
+            placeholder="Write your note here..."
+            style={{
+              width: '100%',
+              minHeight: '120px',
+              padding: '12px',
+              borderRadius: '8px',
+              border: `1px solid ${colors.borderLight}`,
+              fontSize: '14px',
+              fontFamily: 'inherit',
+              resize: 'vertical'
+            }}
+          />
+        </div>
+      </Modal>
     </div>
   );
 };

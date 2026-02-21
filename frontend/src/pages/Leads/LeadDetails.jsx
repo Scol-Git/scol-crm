@@ -1,9 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit2, Mail, Phone, MapPin, Calendar, GraduationCap, FileText } from 'lucide-react';
-import { Card, Button, Badge } from '../../components';
+import { Card, Button, Badge, Modal, Input, Select } from '../../components';
 import { leadService } from '../../services';
 import { colors } from '../../theme';
+
+const statusOptions = [
+  { value: 'new', label: 'New' },
+  { value: 'contacted', label: 'Contacted' },
+  { value: 'qualified', label: 'Qualified' },
+  { value: 'proposal', label: 'Proposal' },
+  { value: 'won', label: 'Won' },
+  { value: 'lost', label: 'Lost' },
+];
+
+const genderOptions = [
+  { value: 'Male', label: 'Male' },
+  { value: 'Female', label: 'Female' },
+  { value: 'Other', label: 'Other' },
+];
+
+const booleanOptions = [
+  { value: 'true', label: 'Yes' },
+  { value: 'false', label: 'No' },
+];
 
 const LeadDetails = () => {
   const { id } = useParams();
@@ -11,6 +31,20 @@ const LeadDetails = () => {
   const [lead, setLead] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [formData, setFormData] = useState({
+    fullName: '',
+    phone: '',
+    email: '',
+    address: '',
+    city: '',
+    gender: '',
+    targetCountry: '',
+    consultantName: '',
+    englishTestPassed: 'false',
+    status: '',
+  });
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     loadLead();
@@ -26,10 +60,53 @@ const LeadDetails = () => {
     try {
       const data = await leadService.getById(id);
       setLead(data);
+      setFormData({
+        fullName: data.fullName || '',
+        phone: data.phone || '',
+        email: data.email || '',
+        address: data.address || '',
+        city: data.city || '',
+        gender: data.gender || '',
+        targetCountry: data.targetCountry || '',
+        consultantName: data.consultantName || '',
+        englishTestPassed: data.englishTestPassed ? 'true' : 'false',
+        status: data.status || 'new',
+      });
     } catch (error) {
       console.error('Failed to load lead:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (errors[name]) {
+      setErrors((prev) => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    if (!formData.fullName.trim()) newErrors.fullName = 'Name is required';
+    if (!formData.phone.trim()) newErrors.phone = 'Phone is required';
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = 'Invalid email address';
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleEditLead = async () => {
+    if (!validateForm()) return;
+    try {
+      const updatedLeadData = { ...lead, ...formData };
+      await leadService.update(id, formData);
+      setLead(updatedLeadData);
+      setShowEditModal(false);
+    } catch (error) {
+      console.error('Failed to update lead:', error);
     }
   };
 
@@ -150,7 +227,7 @@ const LeadDetails = () => {
               <Badge variant={lead.status} size="large">{lead.status}</Badge>
             </div>
           </div>
-          <Button icon={Edit2} variant="secondary" onClick={() => navigate(`/leads`)} style={{ width: isMobile ? '100%' : 'auto' }}>
+          <Button icon={Edit2} variant="secondary" onClick={() => setShowEditModal(true)} style={{ width: isMobile ? '100%' : 'auto' }}>
             Edit Profile
           </Button>
         </div>
@@ -300,6 +377,96 @@ const LeadDetails = () => {
           </div>
         </Card>
       </div>
+
+      {/* Edit Lead Modal */}
+      <Modal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        title="Edit Lead Details"
+        size="medium"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setShowEditModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleEditLead}>Update Lead</Button>
+          </>
+        }
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <Input
+              label="Full Name"
+              name="fullName"
+              value={formData.fullName}
+              onChange={handleInputChange}
+              required
+              error={errors.fullName}
+            />
+          </div>
+          <Input
+            label="Phone"
+            name="phone"
+            value={formData.phone}
+            onChange={handleInputChange}
+            required
+            error={errors.phone}
+          />
+          <Input
+            label="Email"
+            name="email"
+            type="email"
+            value={formData.email}
+            onChange={handleInputChange}
+          />
+          <Input
+            label="Address"
+            name="address"
+            value={formData.address}
+            onChange={handleInputChange}
+          />
+          <Input
+            label="City"
+            name="city"
+            value={formData.city}
+            onChange={handleInputChange}
+          />
+          <Select
+            label="Gender"
+            name="gender"
+            value={formData.gender}
+            onChange={handleInputChange}
+            options={genderOptions}
+          />
+          <Input
+            label="Target Country"
+            name="targetCountry"
+            value={formData.targetCountry}
+            onChange={handleInputChange}
+          />
+          <Input
+            label="Consultant Name"
+            name="consultantName"
+            value={formData.consultantName}
+            onChange={handleInputChange}
+          />
+          <Select
+            label="English Test Passed"
+            name="englishTestPassed"
+            value={formData.englishTestPassed}
+            onChange={handleInputChange}
+            options={booleanOptions}
+          />
+          <Select
+            label="Status"
+            name="status"
+            value={formData.status}
+            onChange={handleInputChange}
+            options={statusOptions}
+          />
+        </div>
+      </Modal>
+
     </div>
   );
 };

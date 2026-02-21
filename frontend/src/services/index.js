@@ -15,6 +15,7 @@ import {
   universityIntakes,
   leadAcademicResults,
   leadEnglishTestResults,
+  detailedCourses,
 } from '../mockData';
 
 // Import additional services
@@ -76,8 +77,10 @@ export const leadService = {
       address: leadData.address || null,
       city: leadData.city || null,
       imgUrl: null,
-      status: 'new',
-      targetUniversity: leadData.targetUniversity || null,
+      status: 'eligible',
+      targetCountry: leadData.targetCountry || null,
+      consultantName: leadData.consultantName || null,
+      englishTestPassed: leadData.englishTestPassed || false,
       email: leadData.email || null,
       phone: leadData.phone,
     };
@@ -208,22 +211,91 @@ export const courseService = {
   },
 };
 
+export const detailedCourseService = {
+  async getAll() {
+    await delay();
+    return detailedCourses;
+  },
+  async getByUniversity(uniId) {
+    await delay();
+    return detailedCourses.filter(c => c.uniId === uniId);
+  }
+};
+
 // Dashboard Statistics Services
 export const dashboardService = {
   async getStats() {
     await delay();
     return {
+      // Top Stats Row 1
       totalLeads: leadProfiles.length,
-      totalUniversities: universities.length,
-      totalCourses: courses.length,
-      activeJourneys: leadProfiles.filter(l => l.status === 'qualified' || l.status === 'contacted').length,
+      onlineLeads: Math.floor(leadProfiles.length * 0.4),
+      offlineLeads: Math.floor(leadProfiles.length * 0.4),
+      loggedInLeads: Math.floor(leadProfiles.length * 0.2),
+
+      // Top Stats Row 2
+      totalEnrollment: 120,
+      onlineEnrollment: 80,
+      physicalEnrollment: 40,
+
+      // Quick Overview Rates
+      eligibleLeadRate: 45,
+      applicationRate: 25,
+      visaRate: 85,
+      enrollRate: 20,
+
+      // Lead Status Distribution
       leadsByStatus: {
-        new: leadProfiles.filter(l => l.status === 'new').length,
-        contacted: leadProfiles.filter(l => l.status === 'contacted').length,
-        qualified: leadProfiles.filter(l => l.status === 'qualified').length,
-        enrolled: leadProfiles.filter(l => l.status === 'enrolled').length,
-        lost: leadProfiles.filter(l => l.status === 'lost').length,
+        'new lead': leadProfiles.filter(l => l.status === 'eligible').length + 2,
+        eligible: leadProfiles.filter(l => l.status === 'eligible').length,
+        'not eligible': leadProfiles.filter(l => l.status === 'not eligible').length,
+        unreachable: leadProfiles.filter(l => l.status === 'unreachable').length,
+        visited: leadProfiles.filter(l => l.status === 'visited').length,
       },
+
+      // Application Statuses Graph Data
+      applicationStatuses: [
+        {
+          name: 'Winter (Jan - Mar)',
+          submitted: 120,
+          conditional: 95,
+          unconditional: 80,
+          interview: 70,
+          payment: 65,
+          cas: 60,
+          visa: 55,
+        },
+        {
+          name: 'Spring (Apr - Jun)',
+          submitted: 90,
+          conditional: 70,
+          unconditional: 60,
+          interview: 55,
+          payment: 45,
+          cas: 40,
+          visa: 38,
+        },
+        {
+          name: 'Summer (Jul - Sep)',
+          submitted: 150,
+          conditional: 120,
+          unconditional: 100,
+          interview: 90,
+          payment: 85,
+          cas: 80,
+          visa: 75,
+        },
+        {
+          name: 'Fall (Oct - Dec)',
+          submitted: 200,
+          conditional: 160,
+          unconditional: 140,
+          interview: 125,
+          payment: 110,
+          cas: 105,
+          visa: 95,
+        }
+      ],
       recentLeads: leadProfiles.slice(0, 5).map(lead => {
         const user = users.find(u => u.id === lead.userId);
         return {

@@ -20,6 +20,7 @@ const Tasks = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
+  const [dateFilters, setDateFilters] = useState({ dateFrom: '', dateTo: '' });
   const [showAddModal, setShowAddModal] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [formData, setFormData] = useState({
@@ -41,7 +42,7 @@ const Tasks = () => {
 
   useEffect(() => {
     filterTasks();
-  }, [searchQuery, statusFilter, priorityFilter, tasks]);
+  }, [searchQuery, statusFilter, priorityFilter, dateFilters, tasks]);
 
   const loadTasks = async () => {
     try {
@@ -71,8 +72,14 @@ const Tasks = () => {
       filtered = filtered.filter((task) => task.status === statusFilter);
     }
 
-    if (priorityFilter) {
-      filtered = filtered.filter((task) => task.priority === priorityFilter);
+    if (dateFilters.dateFrom) {
+      filtered = filtered.filter((task) => new Date(task.dueDate) >= new Date(dateFilters.dateFrom));
+    }
+
+    if (dateFilters.dateTo) {
+      const toDate = new Date(dateFilters.dateTo);
+      toDate.setDate(toDate.getDate() + 1);
+      filtered = filtered.filter((task) => new Date(task.dueDate) < toDate);
     }
 
     // Sort by due date
@@ -397,7 +404,7 @@ const Tasks = () => {
               <Select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                options={statusOptions}
+                options={[{ value: '', label: 'All Statuses' }, ...statusOptions]}
                 placeholder="Status"
               />
             </div>
@@ -405,8 +412,25 @@ const Tasks = () => {
               <Select
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value)}
-                options={priorityOptions}
+                options={[{ value: '', label: 'All Priorities' }, ...priorityOptions]}
                 placeholder="Priority"
+              />
+            </div>
+            {/* Added Date Filter UI */}
+            <div style={{ display: 'flex', gap: '8px', flex: 2, minWidth: isMobile ? '100%' : '300px' }}>
+              <Input
+                type="date"
+                placeholder="From Date"
+                value={dateFilters.dateFrom}
+                onChange={(e) => setDateFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                containerStyle={{ flex: 1, marginBottom: 0 }}
+              />
+              <Input
+                type="date"
+                placeholder="To Date"
+                value={dateFilters.dateTo}
+                onChange={(e) => setDateFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                containerStyle={{ flex: 1, marginBottom: 0 }}
               />
             </div>
           </div>

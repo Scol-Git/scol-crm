@@ -13,6 +13,9 @@ import {
   Calendar,
   DollarSign,
   Plane,
+  CreditCard,
+  UserCheck,
+  ShieldCheck,
 } from 'lucide-react';
 import { Card, Button, Badge } from '../../components';
 import { applicationService, journeyService } from '../../services';
@@ -100,12 +103,15 @@ const ApplicationDetails = () => {
   }
 
   const statusSteps = [
-    { key: 'draft', label: 'Draft', icon: FileText },
-    { key: 'submitted', label: 'Submitted', icon: Upload },
-    { key: 'under_review', label: 'Under Review', icon: Clock },
-    { key: 'accepted', label: 'Accepted', icon: CheckCircle },
-    { key: 'visa_processing', label: 'Visa Processing', icon: Plane },
-    { key: 'enrolled', label: 'Enrolled', icon: CheckCircle },
+    { key: 'Pending Review', label: 'Review', icon: Clock },
+    { key: 'Application Submitted', label: 'Submitted', icon: Upload },
+    { key: 'Conditional offer', label: 'Conditional', icon: AlertCircle },
+    { key: 'Unconditional offer', label: 'Unconditional', icon: CheckCircle },
+    { key: 'Interview', label: 'Interview', icon: UserCheck },
+    { key: 'Payment', label: 'Payment', icon: CreditCard },
+    { key: 'CAS/COE/120', label: 'CAS / COE', icon: FileText },
+    { key: 'VISA', label: 'VISA', icon: Plane },
+    { key: 'Enrolled', label: 'Enrolled', icon: ShieldCheck },
   ];
 
   const currentStepIndex = statusSteps.findIndex(s => s.key === application.status);
@@ -209,11 +215,11 @@ const ApplicationDetails = () => {
 
               return (
                 <React.Fragment key={step.key}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, position: 'relative' }}>
                     <div
                       style={{
-                        width: '48px',
-                        height: '48px',
+                        width: isMobile ? '32px' : '40px',
+                        height: isMobile ? '32px' : '40px',
                         borderRadius: '50%',
                         backgroundColor: isCompleted ? colors.success : colors.appBg,
                         border: `2px solid ${isCompleted ? colors.success : colors.borderLight}`,
@@ -222,16 +228,19 @@ const ApplicationDetails = () => {
                         justifyContent: 'center',
                         color: isCompleted ? '#fff' : colors.textSecondary,
                         transition: 'all 0.3s ease',
+                        zIndex: 2,
                       }}
                     >
-                      <Icon size={20} />
+                      <Icon size={isMobile ? 16 : 18} />
                     </div>
                     <span
                       style={{
                         marginTop: '8px',
-                        fontSize: '12px',
+                        fontSize: isMobile ? '10px' : '12px',
                         fontWeight: isCurrent ? '600' : '400',
                         color: isCompleted ? colors.textPrimary : colors.textSecondary,
+                        textAlign: 'center',
+                        maxWidth: '80px',
                       }}
                     >
                       {step.label}
@@ -243,7 +252,8 @@ const ApplicationDetails = () => {
                         flex: 1,
                         height: '2px',
                         backgroundColor: index < currentStepIndex ? colors.success : colors.borderLight,
-                        marginBottom: '28px',
+                        marginBottom: isMobile ? '24px' : '28px',
+                        zIndex: 1,
                       }}
                     />
                   )}

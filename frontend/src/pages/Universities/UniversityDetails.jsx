@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Globe, MapPin, BookOpen, Calendar, DollarSign, Clock, Edit2 } from 'lucide-react';
-import { Card, Button, Badge, Table } from '../../components';
-import { universityService } from '../../services';
+import { Card, Button, Badge, Table, Input, Select, Modal } from '../../components';
+import { universityService, lookupService } from '../../services';
 import { colors } from '../../theme';
 
 const UniversityDetails = () => {
@@ -11,6 +11,9 @@ const UniversityDetails = () => {
   const [university, setUniversity] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [countries, setCountries] = useState([]);
+  const [formData, setFormData] = useState({ uniName: '', countryId: '', description: '' });
 
   useEffect(() => {
     loadUniversity();
@@ -24,13 +27,29 @@ const UniversityDetails = () => {
 
   const loadUniversity = async () => {
     try {
-      const data = await universityService.getById(id);
+      const [data, countryData] = await Promise.all([
+        universityService.getById(id),
+        lookupService.getCountries()
+      ]);
       setUniversity(data);
+      setCountries(countryData);
+      setFormData({
+        uniName: data.uniName || '',
+        countryId: data.sysCountryId || '',
+        description: data.aboutUs || '',
+      });
     } catch (error) {
       console.error('Failed to load university:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleFormChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleSave = () => {
+    console.log('Save Uni', formData);
+    // In a real app, update logic via universityService goes here.
+    setShowEditModal(false);
   };
 
   if (loading) {
@@ -216,7 +235,7 @@ const UniversityDetails = () => {
               )}
             </div>
           </div>
-          <Button icon={Edit2} variant="secondary">
+          <Button icon={Edit2} variant="secondary" onClick={() => setShowEditModal(true)}>
             Edit University
           </Button>
         </div>
@@ -315,6 +334,26 @@ const UniversityDetails = () => {
           emptyMessage="No courses available"
         />
       </Card>
+
+      {/* Edit University Modal */}
+      <Modal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        title="Edit University"
+        size="medium"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setShowEditModal(false)}>Cancel</Button>
+            <Button onClick={handleSave}>Save University</Button>
+          </>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px 0' }}>
+          <Input label="University Name" name="uniName" value={formData.uniName} onChange={handleFormChange} placeholder="Enter university name" />
+          <Select label="Country" name="countryId" value={formData.countryId} onChange={handleFormChange} options={[{ value: '', label: 'Select Country' }, ...countries.map(c => ({ value: c.id, label: c.countryName }))]} />
+          <Input label="Description" name="description" value={formData.description} onChange={handleFormChange} placeholder="Optional description..." />
+        </div>
+      </Modal>
     </div>
   );
 };
