@@ -26,6 +26,13 @@ const LeadList = () => {
     consultantName: '',
     englishTestPassed: 'false',
   });
+  const [filters, setFilters] = useState({
+    dateFrom: '',
+    dateTo: '',
+    status: '',
+    country: '',
+    englishTest: '',
+  });
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
@@ -397,43 +404,60 @@ const LeadList = () => {
         borderRadius: '12px',
         border: `1px solid ${colors.borderLight}`
       }}>
-        <div style={{ display: 'flex', gap: '8px', gridColumn: isMobile ? '1 / -1' : 'span 2' }}>
-          <Input
-            type="date"
-            placeholder="From Date"
-            value={filters.dateFrom}
-            onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
-            containerStyle={{ flex: 1, marginBottom: 0 }}
-          />
-          <Input
-            type="date"
-            placeholder="To Date"
-            value={filters.dateTo}
-            onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
-            containerStyle={{ flex: 1, marginBottom: 0 }}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: isMobile ? '1 / -1' : 'span 2' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: colors.textSecondary }}>
+            <span style={{ fontSize: '13px', fontWeight: '500' }}>Date Range:</span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Input
+              type="date"
+              placeholder="From Date"
+              value={filters.dateFrom}
+              onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+              containerStyle={{ flex: 1, marginBottom: 0 }}
+            />
+            <Input
+              type="date"
+              placeholder="To Date"
+              value={filters.dateTo}
+              onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+              containerStyle={{ flex: 1, marginBottom: 0 }}
+            />
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <span style={{ fontSize: '13px', fontWeight: '500', color: colors.textSecondary }}>Status</span>
+          <Select
+            value={filters.status}
+            onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+            options={[{ value: '', label: 'All Statuses' }, ...statusOptions]}
+            containerStyle={{ marginBottom: 0 }}
           />
         </div>
-        <Select
-          value={filters.status}
-          onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-          options={[{ value: '', label: 'All Statuses' }, ...statusOptions]}
-        />
-        <Select
-          value={filters.country}
-          onChange={(e) => setFilters(prev => ({ ...prev, country: e.target.value }))}
-          options={[
-            { value: '', label: 'All Countries' },
-            { value: 'United Kingdom', label: 'United Kingdom' },
-            { value: 'United States', label: 'United States' },
-            { value: 'Canada', label: 'Canada' },
-            { value: 'Australia', label: 'Australia' }
-          ]}
-        />
-        <Select
-          value={filters.englishTest}
-          onChange={(e) => setFilters(prev => ({ ...prev, englishTest: e.target.value }))}
-          options={[{ value: '', label: 'English Test: Any' }, ...booleanOptions]}
-        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <span style={{ fontSize: '13px', fontWeight: '500', color: colors.textSecondary }}>Target Country</span>
+          <Select
+            value={filters.country}
+            onChange={(e) => setFilters(prev => ({ ...prev, country: e.target.value }))}
+            options={[
+              { value: '', label: 'All Countries' },
+              { value: 'United Kingdom', label: 'United Kingdom' },
+              { value: 'United States', label: 'United States' },
+              { value: 'Canada', label: 'Canada' },
+              { value: 'Australia', label: 'Australia' }
+            ]}
+            containerStyle={{ marginBottom: 0 }}
+          />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <span style={{ fontSize: '13px', fontWeight: '500', color: colors.textSecondary }}>English Test</span>
+          <Select
+            value={filters.englishTest}
+            onChange={(e) => setFilters(prev => ({ ...prev, englishTest: e.target.value }))}
+            options={[{ value: '', label: 'English Test: Any' }, ...booleanOptions]}
+            containerStyle={{ marginBottom: 0 }}
+          />
+        </div>
       </div>
 
       {/* Leads Table */}

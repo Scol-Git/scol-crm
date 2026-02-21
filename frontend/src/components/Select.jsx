@@ -12,10 +12,12 @@ const Select = ({
   error,
   name,
   id,
+  containerStyle: customContainerStyle,
   ...props
 }) => {
   const containerStyle = {
     marginBottom: '16px',
+    ...customContainerStyle,
   };
 
   const labelStyle = {

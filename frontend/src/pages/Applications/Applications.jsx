@@ -394,35 +394,45 @@ const Applications = () => {
           alignItems: isMobile ? 'stretch' : 'center',
           flexWrap: 'wrap'
         }}>
-          <SearchInput
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={isMobile ? "Search..." : "Search by name, university, or course..."}
-            style={{ width: isMobile ? '100%' : '350px' }}
-          />
-          <div style={{ width: isMobile ? '100%' : '200px' }}>
+          <div style={{ width: isMobile ? '100%' : '350px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <span style={{ fontSize: '13px', fontWeight: '500', color: colors.textSecondary, visibility: 'hidden' }}>Search</span>
+            <SearchInput
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={isMobile ? "Search..." : "Search by name, university, or course..."}
+              style={{ width: '100%' }}
+            />
+          </div>
+          <div style={{ width: isMobile ? '100%' : '200px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <span style={{ fontSize: '13px', fontWeight: '500', color: colors.textSecondary }}>Status</span>
             <Select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               options={[{ value: '', label: 'All Statuses' }, ...statusOptions]}
               placeholder="Filter by status"
+              containerStyle={{ marginBottom: 0 }}
             />
           </div>
-          <div style={{ display: 'flex', gap: '8px', width: isMobile ? '100%' : 'auto' }}>
-            <Input
-              type="date"
-              placeholder="From Date"
-              value={dateFilters.dateFrom}
-              onChange={(e) => setDateFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
-              containerStyle={{ flex: 1, marginBottom: 0 }}
-            />
-            <Input
-              type="date"
-              placeholder="To Date"
-              value={dateFilters.dateTo}
-              onChange={(e) => setDateFilters(prev => ({ ...prev, dateTo: e.target.value }))}
-              containerStyle={{ flex: 1, marginBottom: 0 }}
-            />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: isMobile ? '100%' : 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: colors.textSecondary }}>
+              <span style={{ fontSize: '13px', fontWeight: '500' }}>Date Range:</span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <Input
+                type="date"
+                placeholder="From Date"
+                value={dateFilters.dateFrom}
+                onChange={(e) => setDateFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                containerStyle={{ flex: 1, marginBottom: 0 }}
+              />
+              <Input
+                type="date"
+                placeholder="To Date"
+                value={dateFilters.dateTo}
+                onChange={(e) => setDateFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                containerStyle={{ flex: 1, marginBottom: 0 }}
+              />
+            </div>
           </div>
         </div>
         <div style={{ color: colors.textSecondary, fontSize: '14px', textAlign: isMobile ? 'center' : 'right' }}>
