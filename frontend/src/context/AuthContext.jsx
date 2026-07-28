@@ -24,14 +24,20 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  const login = async (identifier, password) => {
-    const result = await authService.login(identifier, password);
+  const login = async (credentials) => {
+    const result = await authService.login(credentials);
     setUser(result.user);
     return result;
   };
 
   const register = async (data) => {
     return await authService.register(data);
+  };
+
+  const completeOtpVerification = async (otpAccessToken, otp) => {
+    const result = await authService.verifyOtp(otpAccessToken, otp);
+    setUser(result.user);
+    return result;
   };
 
   const logout = async () => {
@@ -43,6 +49,7 @@ export const AuthProvider = ({ children }) => {
     user,
     login,
     register,
+    completeOtpVerification,
     logout,
     isAuthenticated: !!user,
     loading,

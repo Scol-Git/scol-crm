@@ -1,18 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Phone, ArrowLeft } from 'lucide-react';
+import { Phone, Lock, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { authService } from '../../services/authService';
 import { colors } from '../../theme';
 import logoRed from '../../assets/Logo/logo_red.png';
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
-  const [identifier, setIdentifier] = useState('');
-  const [method, setMethod] = useState('email'); // 'email' or 'phone'
+  const [formData, setFormData] = useState({
+    phone: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
-  const [maskedPhone, setMaskedPhone] = useState('');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
@@ -23,26 +26,40 @@ const ForgotPassword = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    setError('');
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (formData.newPassword.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+
+    if (formData.newPassword !== formData.confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
     try {
-      const result = await authService.forgotPassword(identifier);
-      setSuccess(true);
-      if (result.phone) {
-        setMaskedPhone(result.phone);
-      }
-      // After showing success, navigate to reset password
-      setTimeout(() => {
-        navigate('/reset-password', {
-          state: {
-            identifier,
-            sessionId: result.sessionId,
-          }
-        });
-      }, 2000);
+      const result = await authService.forgotPassword({
+        phone: formData.phone,
+        newPassword: formData.newPassword,
+      });
+      navigate('/verify-otp', {
+        state: {
+          phone: formData.phone,
+          otpAccessToken: result.otpAccessToken,
+          purpose: 'password_reset',
+        }
+      });
     } catch (err) {
       setError(err.message || 'Failed to process request. Please try again.');
     } finally {
@@ -74,19 +91,6 @@ const ForgotPassword = () => {
     justifyContent: 'center',
     gap: '12px',
     marginBottom: isMobile ? '24px' : '32px',
-  };
-
-  const logoIconStyle = {
-    width: '48px',
-    height: '48px',
-    backgroundColor: colors.brandPrimary,
-    borderRadius: '12px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: '22px',
   };
 
   const titleStyle = {
@@ -125,7 +129,7 @@ const ForgotPassword = () => {
 
   const inputStyle = {
     width: '100%',
-    padding: '14px 16px 14px 48px',
+    padding: '14px 48px 14px 48px',
     fontSize: '15px',
     border: `1px solid ${colors.borderLight}`,
     borderRadius: '10px',
@@ -138,6 +142,17 @@ const ForgotPassword = () => {
     position: 'absolute',
     left: '16px',
     color: colors.textMuted,
+  };
+
+  const passwordToggleStyle = {
+    position: 'absolute',
+    right: '16px',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    color: colors.textMuted,
+    padding: '4px',
+    fontFamily: 'inherit',
   };
 
   const buttonStyle = {
@@ -164,16 +179,6 @@ const ForgotPassword = () => {
     marginBottom: '20px',
   };
 
-  const successStyle = {
-    backgroundColor: `${colors.success}15`,
-    color: colors.success,
-    padding: '16px',
-    borderRadius: '8px',
-    fontSize: '14px',
-    marginBottom: '20px',
-    textAlign: 'center',
-  };
-
   const linkStyle = {
     color: colors.brandPrimary,
     textDecoration: 'none',
@@ -182,20 +187,6 @@ const ForgotPassword = () => {
     alignItems: 'center',
     gap: '6px',
   };
-
-  const tabStyle = (isActive) => ({
-    flex: 1,
-    padding: '12px',
-    border: 'none',
-    backgroundColor: isActive ? colors.brandPrimary : 'transparent',
-    color: isActive ? '#FFFFFF' : colors.textSecondary,
-    fontWeight: '500',
-    fontSize: '14px',
-    fontFamily: 'inherit',
-    cursor: 'pointer',
-    borderRadius: '8px',
-    transition: 'all 0.2s ease',
-  });
 
   return (
     <div style={containerStyle}>
@@ -210,71 +201,78 @@ const ForgotPassword = () => {
 
         <h2 style={titleStyle}>Forgot Password?</h2>
         <p style={subtitleStyle}>
-          No worries! Enter your email or phone number and we'll send you a reset code.
+          Enter your phone number and a new password. We'll text you a code to confirm the change.
         </p>
 
         {error && <div style={errorStyle}>{error}</div>}
 
-        {success && (
-          <div style={successStyle}>
-            <p style={{ margin: '0 0 8px 0', fontWeight: '600' }}>Reset code sent!</p>
-            <p style={{ margin: 0 }}>
-              {maskedPhone ? `OTP sent to ${maskedPhone}` : 'Check your email for reset instructions.'}
-            </p>
+        <form onSubmit={handleSubmit}>
+          <div style={inputGroupStyle}>
+            <label style={labelStyle}>Phone Number</label>
+            <div style={inputWrapperStyle}>
+              <Phone size={20} style={inputIconStyle} />
+              <input
+                type="tel"
+                name="phone"
+                value={formData.phone}
+                onChange={handleChange}
+                placeholder="Enter your phone number"
+                style={{ ...inputStyle, paddingRight: '16px' }}
+                required
+              />
+            </div>
           </div>
-        )}
 
-        {!success && (
-          <>
-            {/* Method Tabs */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', backgroundColor: colors.appBg, padding: '4px', borderRadius: '10px' }}>
+          <div style={inputGroupStyle}>
+            <label style={labelStyle}>New Password</label>
+            <div style={inputWrapperStyle}>
+              <Lock size={20} style={inputIconStyle} />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="newPassword"
+                value={formData.newPassword}
+                onChange={handleChange}
+                placeholder="Enter new password"
+                style={inputStyle}
+                required
+              />
               <button
                 type="button"
-                style={tabStyle(method === 'email')}
-                onClick={() => setMethod('email')}
+                style={passwordToggleStyle}
+                onClick={() => setShowPassword(!showPassword)}
               >
-                Email
-              </button>
-              <button
-                type="button"
-                style={tabStyle(method === 'phone')}
-                onClick={() => setMethod('phone')}
-              >
-                Phone
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
             </div>
+          </div>
 
-            <form onSubmit={handleSubmit}>
-              <div style={inputGroupStyle}>
-                <label style={labelStyle}>
-                  {method === 'email' ? 'Email Address' : 'Phone Number'}
-                </label>
-                <div style={inputWrapperStyle}>
-                  {method === 'email' ? (
-                    <Mail size={20} style={inputIconStyle} />
-                  ) : (
-                    <Phone size={20} style={inputIconStyle} />
-                  )}
-                  <input
-                    type={method === 'email' ? 'email' : 'tel'}
-                    value={identifier}
-                    onChange={(e) => {
-                      setIdentifier(e.target.value);
-                      setError('');
-                    }}
-                    placeholder={method === 'email' ? 'Enter your email' : 'Enter your phone number'}
-                    style={inputStyle}
-                    required
-                  />
-                </div>
-              </div>
-
-              <button type="submit" style={buttonStyle} disabled={loading}>
-                {loading ? 'Sending...' : 'Send Reset Code'}
+          <div style={inputGroupStyle}>
+            <label style={labelStyle}>Confirm Password</label>
+            <div style={inputWrapperStyle}>
+              <Lock size={20} style={inputIconStyle} />
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                name="confirmPassword"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                placeholder="Confirm new password"
+                style={inputStyle}
+                required
+              />
+              <button
+                type="button"
+                style={passwordToggleStyle}
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
-            </form>
-          </>
-        )}
+            </div>
+          </div>
+
+          <button type="submit" style={buttonStyle} disabled={loading}>
+            {loading ? 'Sending...' : 'Send Reset Code'}
+          </button>
+        </form>
 
         <p style={{ textAlign: 'center', marginTop: '24px' }}>
           <Link to="/login" style={linkStyle}>

@@ -17,7 +17,6 @@ import {
   Login,
   Register,
   ForgotPassword,
-  ResetPassword,
   VerifyOtp,
 } from './pages'
 
@@ -30,7 +29,6 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/verify-otp" element={<VerifyOtp />} />
 
           {/* Protected Routes */}

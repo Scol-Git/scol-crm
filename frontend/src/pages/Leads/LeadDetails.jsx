@@ -1,24 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Edit2, Mail, Phone, MapPin, Calendar, GraduationCap, FileText } from 'lucide-react';
 import { Card, Button, Badge, Modal, Input, Select } from '../../components';
 import { leadService } from '../../services';
+import { LEAD_STATUS, leadStatusVariant, REGISTER_SOURCE, GENDER_OPTIONS } from '../../services/mappers';
 import { colors } from '../../theme';
 
-const statusOptions = [
-  { value: 'new', label: 'New' },
-  { value: 'contacted', label: 'Contacted' },
-  { value: 'qualified', label: 'Qualified' },
-  { value: 'proposal', label: 'Proposal' },
-  { value: 'won', label: 'Won' },
-  { value: 'lost', label: 'Lost' },
-];
-
-const genderOptions = [
-  { value: 'Male', label: 'Male' },
-  { value: 'Female', label: 'Female' },
-  { value: 'Other', label: 'Other' },
-];
+const statusOptions = LEAD_STATUS.options;
+const genderOptions = GENDER_OPTIONS;
+const registerSourceOptions = REGISTER_SOURCE.options;
 
 const booleanOptions = [
   { value: 'true', label: 'Yes' },
@@ -28,10 +18,13 @@ const booleanOptions = [
 const LeadDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [lead, setLead] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [countries, setCountries] = useState([]);
+  const [consultants, setConsultants] = useState([]);
   const [formData, setFormData] = useState({
     fullName: '',
     phone: '',
@@ -39,15 +32,17 @@ const LeadDetails = () => {
     address: '',
     city: '',
     gender: '',
-    targetCountry: '',
-    consultantName: '',
-    englishTestPassed: 'false',
-    status: '',
+    targetCountryId: '',
+    consultantId: '',
+    registerSource: 'Offline',
+    leadStatus: 'NewLead',
+    hasPassedEnglishTest: 'false',
   });
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
     loadLead();
+    loadDropdownData();
 
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
@@ -56,26 +51,45 @@ const LeadDetails = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, [id]);
 
+  const populateForm = (data) => {
+    setFormData({
+      fullName: data.fullName || '',
+      phone: data.phone || '',
+      email: data.email || '',
+      address: data.address || '',
+      city: data.city || '',
+      gender: data.gender || '',
+      targetCountryId: data.targetCountryId || '',
+      consultantId: data.consultantId || '',
+      registerSource: data.registerSource || 'Offline',
+      leadStatus: data.status || 'NewLead',
+      hasPassedEnglishTest: data.hasPassedEnglishTest ? 'true' : 'false',
+      enrollmentStatus: data.enrollmentStatus || '',
+    });
+  };
+
   const loadLead = async () => {
     try {
-      const data = await leadService.getById(id);
+      // Prefer the lead passed via navigation state (from the Leads list) -
+      // the backend has no GET-by-id endpoint, so a direct URL visit falls
+      // back to fetching the full list and matching by id.
+      const data = location.state?.lead ?? await leadService.getById(id);
       setLead(data);
-      setFormData({
-        fullName: data.fullName || '',
-        phone: data.phone || '',
-        email: data.email || '',
-        address: data.address || '',
-        city: data.city || '',
-        gender: data.gender || '',
-        targetCountry: data.targetCountry || '',
-        consultantName: data.consultantName || '',
-        englishTestPassed: data.englishTestPassed ? 'true' : 'false',
-        status: data.status || 'new',
-      });
+      if (data) populateForm(data);
     } catch (error) {
       console.error('Failed to load lead:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadDropdownData = async () => {
+    try {
+      const { countries: countryList, consultants: consultantList } = await leadService.getDropdownData();
+      setCountries(countryList);
+      setConsultants(consultantList);
+    } catch (error) {
+      console.error('Failed to load lead dropdown data:', error);
     }
   };
 
@@ -101,9 +115,12 @@ const LeadDetails = () => {
   const handleEditLead = async () => {
     if (!validateForm()) return;
     try {
-      const updatedLeadData = { ...lead, ...formData };
-      await leadService.update(id, formData);
-      setLead(updatedLeadData);
+      const updated = await leadService.update(id, {
+        ...formData,
+        hasPassedEnglishTest: formData.hasPassedEnglishTest === 'true',
+      });
+      setLead(updated);
+      populateForm(updated);
       setShowEditModal(false);
     } catch (error) {
       console.error('Failed to update lead:', error);
@@ -222,9 +239,9 @@ const LeadDetails = () => {
                 {lead.fullName}
               </h1>
               <p style={{ margin: '4px 0 12px 0', color: colors.textSecondary, fontSize: '14px' }}>
-                {lead.targetUniversity || 'No target university set'}
+                {lead.targetCountry || countries.find((c) => c.id === lead.targetCountryId)?.name || 'No target country set'}
               </p>
-              <Badge variant={lead.status} size="large">{lead.status}</Badge>
+              <Badge variant={leadStatusVariant(lead.status)} size="large">{LEAD_STATUS.label(lead.status)}</Badge>
             </div>
           </div>
           <Button icon={Edit2} variant="secondary" onClick={() => setShowEditModal(true)} style={{ width: isMobile ? '100%' : 'auto' }}>
@@ -369,11 +386,14 @@ const LeadDetails = () => {
           )}
         </Card>
 
-        {/* Journey Timeline */}
-        <Card title="Application Journey">
+        {/* Applications pointer - per-application activity lives on the Applications page */}
+        <Card title="Applications">
           <div style={{ textAlign: 'center', padding: '24px', color: colors.textSecondary }}>
-            <p>Application journey tracking will be displayed here.</p>
-            <p style={{ fontSize: '14px' }}>Status: <Badge variant={lead.status}>{lead.status}</Badge></p>
+            <p>View this lead's applications, stage progress, and notes from the Applications page.</p>
+            <p style={{ fontSize: '14px' }}>Lead Status: <Badge variant={leadStatusVariant(lead.status)}>{LEAD_STATUS.label(lead.status)}</Badge></p>
+            <Button variant="secondary" size="small" style={{ marginTop: '12px' }} onClick={() => navigate('/applications')}>
+              Go to Applications
+            </Button>
           </div>
         </Card>
       </div>
@@ -438,29 +458,40 @@ const LeadDetails = () => {
             onChange={handleInputChange}
             options={genderOptions}
           />
-          <Input
+          <Select
             label="Target Country"
-            name="targetCountry"
-            value={formData.targetCountry}
+            name="targetCountryId"
+            value={formData.targetCountryId}
             onChange={handleInputChange}
+            options={countries.map((c) => ({ value: c.id, label: c.name }))}
+            placeholder="Select target country"
           />
-          <Input
-            label="Consultant Name"
-            name="consultantName"
-            value={formData.consultantName}
+          <Select
+            label="Consultant"
+            name="consultantId"
+            value={formData.consultantId}
             onChange={handleInputChange}
+            options={consultants.map((c) => ({ value: c.id, label: c.name }))}
+            placeholder="Select consultant"
+          />
+          <Select
+            label="Register Source"
+            name="registerSource"
+            value={formData.registerSource}
+            onChange={handleInputChange}
+            options={registerSourceOptions}
           />
           <Select
             label="English Test Passed"
-            name="englishTestPassed"
-            value={formData.englishTestPassed}
+            name="hasPassedEnglishTest"
+            value={formData.hasPassedEnglishTest}
             onChange={handleInputChange}
             options={booleanOptions}
           />
           <Select
             label="Status"
-            name="status"
-            value={formData.status}
+            name="leadStatus"
+            value={formData.leadStatus}
             onChange={handleInputChange}
             options={statusOptions}
           />

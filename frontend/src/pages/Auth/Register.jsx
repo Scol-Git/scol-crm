@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Mail, Lock, Phone, User } from 'lucide-react';
+import { Eye, EyeOff, Lock, Phone, User } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../theme';
 import logoWhite from '../../assets/Logo/logo_white.png';
@@ -11,7 +11,6 @@ const Register = () => {
   const { register } = useAuth();
   const [formData, setFormData] = useState({
     fullName: '',
-    email: '',
     phone: '',
     password: '',
     confirmPassword: '',
@@ -47,12 +46,6 @@ const Register = () => {
       newErrors.fullName = 'Full name is required';
     }
 
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Invalid email format';
-    }
-
     if (!formData.phone.trim()) {
       newErrors.phone = 'Phone number is required';
     } else if (!/^\+?[\d\s-]{10,}$/.test(formData.phone)) {
@@ -82,12 +75,16 @@ const Register = () => {
     setError('');
 
     try {
-      const result = await register(formData);
+      const result = await register({
+        fullName: formData.fullName,
+        phone: formData.phone,
+        password: formData.password,
+      });
       // Navigate to OTP verification
       navigate('/verify-otp', {
         state: {
           phone: formData.phone,
-          sessionId: result.sessionId,
+          otpAccessToken: result.otpAccessToken,
           purpose: 'register'
         }
       });
@@ -317,22 +314,6 @@ const Register = () => {
                 />
               </div>
               {errors.fullName && <div style={fieldErrorStyle}>{errors.fullName}</div>}
-            </div>
-
-            <div style={inputGroupStyle}>
-              <label style={labelStyle}>Email Address</label>
-              <div style={inputWrapperStyle}>
-                <Mail size={18} style={inputIconStyle} />
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="Enter your email"
-                  style={inputStyle(errors.email)}
-                />
-              </div>
-              {errors.email && <div style={fieldErrorStyle}>{errors.email}</div>}
             </div>
 
             <div style={inputGroupStyle}>

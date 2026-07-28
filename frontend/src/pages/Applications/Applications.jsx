@@ -11,6 +11,12 @@ import {
 } from 'lucide-react';
 import { Card, Table, Badge, SearchInput, Button, Select, Modal, Input } from '../../components';
 import { applicationService } from '../../services';
+import {
+  APPLICATION_STATUS,
+  applicationStatusVariant,
+  APPLICATION_STAGE,
+  applicationStageVariant,
+} from '../../services/mappers';
 import { colors } from '../../theme';
 
 const Applications = () => {
@@ -20,10 +26,15 @@ const Applications = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [stageFilter, setStageFilter] = useState('');
   const [dateFilters, setDateFilters] = useState({ dateFrom: '', dateTo: '' });
   const [showAddNoteModal, setShowAddNoteModal] = useState(false);
-  const [selectedApplicationId, setSelectedApplicationId] = useState(null);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedApplication, setSelectedApplication] = useState(null);
   const [noteContent, setNoteContent] = useState('');
+  const [newStatus, setNewStatus] = useState('');
+  const [statusRemarks, setStatusRemarks] = useState('');
+  const [savingAction, setSavingAction] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
@@ -38,11 +49,11 @@ const Applications = () => {
 
   useEffect(() => {
     filterApplications();
-  }, [searchQuery, statusFilter, dateFilters, applications]);
+  }, [searchQuery, statusFilter, stageFilter, dateFilters, applications]);
 
   const loadApplications = async () => {
     try {
-      const data = await applicationService.getAll();
+      const { applications: data } = await applicationService.getAll();
       setApplications(data);
       setFilteredApplications(data);
     } catch (error) {
@@ -69,6 +80,10 @@ const Applications = () => {
       filtered = filtered.filter((app) => app.status === statusFilter);
     }
 
+    if (stageFilter) {
+      filtered = filtered.filter((app) => app.stage === stageFilter);
+    }
+
     if (dateFilters.dateFrom) {
       filtered = filtered.filter((app) => new Date(app.appliedDate) >= new Date(dateFilters.dateFrom));
     }
@@ -82,59 +97,59 @@ const Applications = () => {
     setFilteredApplications(filtered);
   };
 
-  const handleSaveNote = () => {
-    if (!noteContent.trim()) return;
-    console.log('Saving note for app', selectedApplicationId, noteContent);
-    // Here you would typically call applicationService.addNote or similar
-    setShowAddNoteModal(false);
-    setNoteContent('');
-    setSelectedApplicationId(null);
+  const handleSaveNote = async () => {
+    if (!noteContent.trim() || !selectedApplication) return;
+    setSavingAction(true);
+    try {
+      await applicationService.addNote(selectedApplication.leadId, selectedApplication.id, {
+        description: noteContent.trim(),
+      });
+      setShowAddNoteModal(false);
+      setNoteContent('');
+      setSelectedApplication(null);
+    } catch (error) {
+      console.error('Failed to save note:', error);
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
+  const handleSaveStatus = async () => {
+    if (!newStatus || !selectedApplication) return;
+    setSavingAction(true);
+    try {
+      await applicationService.changeStatus(selectedApplication.leadId, selectedApplication.id, {
+        toStatus: newStatus,
+        remarks: statusRemarks.trim() || undefined,
+      });
+      setShowStatusModal(false);
+      setNewStatus('');
+      setStatusRemarks('');
+      setSelectedApplication(null);
+      loadApplications();
+    } catch (error) {
+      console.error('Failed to update status:', error);
+    } finally {
+      setSavingAction(false);
+    }
   };
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'draft':
+      case 'PENDING':
         return <FileText size={16} />;
-      case 'submitted':
-      case 'under_review':
+      case 'IN_PROGRESS':
         return <Clock size={16} />;
-      case 'conditional_offer':
+      case 'ON_HOLD':
         return <AlertCircle size={16} />;
-      case 'accepted':
-      case 'enrolled':
+      case 'COMPLETED':
         return <CheckCircle size={16} />;
-      case 'rejected':
+      case 'REJECTED':
+      case 'CANCELLED':
         return <XCircle size={16} />;
       default:
         return <FileText size={16} />;
     }
-  };
-
-  const getStatusVariant = (status) => {
-    switch (status) {
-      case 'draft':
-        return 'default';
-      case 'submitted':
-        return 'info';
-      case 'under_review':
-        return 'warning';
-      case 'conditional_offer':
-        return 'warning';
-      case 'accepted':
-        return 'success';
-      case 'enrolled':
-        return 'enrolled';
-      case 'rejected':
-        return 'error';
-      case 'visa_processing':
-        return 'info';
-      default:
-        return 'default';
-    }
-  };
-
-  const formatStatus = (status) => {
-    return status.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
   const columns = [
@@ -207,11 +222,18 @@ const Applications = () => {
       render: (status) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           {getStatusIcon(status)}
-          <Badge variant={getStatusVariant(status)}>
-            {formatStatus(status)}
+          <Badge variant={applicationStatusVariant(status)}>
+            {APPLICATION_STATUS.label(status)}
           </Badge>
         </div>
       ),
+    },
+    {
+      title: 'Stage',
+      dataIndex: 'stage',
+      render: (stage) => stage ? (
+        <Badge variant={applicationStageVariant(stage)}>{APPLICATION_STAGE.label(stage)}</Badge>
+      ) : '-',
     },
     {
       title: 'Last Updated',
@@ -228,7 +250,7 @@ const Applications = () => {
             size="small"
             onClick={(e) => {
               e.stopPropagation();
-              setSelectedApplicationId(id);
+              setSelectedApplication(row);
               setShowAddNoteModal(true);
             }}
           >
@@ -239,8 +261,9 @@ const Applications = () => {
             size="small"
             onClick={(e) => {
               e.stopPropagation();
-              // Update status functionality can be built similarly
-              console.log('Update Status for', id);
+              setSelectedApplication(row);
+              setNewStatus(row.status || '');
+              setShowStatusModal(true);
             }}
           >
             Update Status
@@ -251,7 +274,7 @@ const Applications = () => {
             icon={Eye}
             onClick={(e) => {
               e.stopPropagation();
-              navigate(`/applications/${id}`);
+              navigate(`/applications/${id}`, { state: { leadId: row.leadId } });
             }}
           >
             View
@@ -261,24 +284,15 @@ const Applications = () => {
     },
   ];
 
-  const statusOptions = [
-    { value: 'Pending Review', label: 'Pending Review' },
-    { value: 'Application Submitted', label: 'Application Submitted' },
-    { value: 'Conditional offer', label: 'Conditional offer' },
-    { value: 'Unconditional offer', label: 'Unconditional offer' },
-    { value: 'Interview', label: 'Interview' },
-    { value: 'Payment', label: 'Payment' },
-    { value: 'CAS/COE/120', label: 'CAS/COE/120' },
-    { value: 'VISA', label: 'VISA' },
-    { value: 'Enrolled', label: 'Enrolled' },
-  ];
+  const statusOptions = APPLICATION_STATUS.options;
+  const stageOptions = APPLICATION_STAGE.options;
 
   // Calculate stats
   const stats = {
     total: applications.length,
-    pending: applications.filter(a => ['submitted', 'under_review'].includes(a.status)).length,
-    accepted: applications.filter(a => ['accepted', 'conditional_offer'].includes(a.status)).length,
-    enrolled: applications.filter(a => a.status === 'enrolled').length,
+    pending: applications.filter(a => ['PENDING', 'IN_PROGRESS'].includes(a.status)).length,
+    completed: applications.filter(a => a.status === 'COMPLETED').length,
+    onHold: applications.filter(a => a.status === 'ON_HOLD').length,
   };
 
   return (
@@ -328,7 +342,7 @@ const Applications = () => {
             </div>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.pending}</div>
-              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>Pending Review</div>
+              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>Pending / In Progress</div>
             </div>
           </div>
         </Card>
@@ -348,8 +362,8 @@ const Applications = () => {
               <CheckCircle size={isMobile ? 18 : 20} />
             </div>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.accepted}</div>
-              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>Application Submitted</div>
+              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.completed}</div>
+              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>Completed</div>
             </div>
           </div>
         </Card>
@@ -369,8 +383,8 @@ const Applications = () => {
               <GraduationCap size={isMobile ? 18 : 20} />
             </div>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.enrolled}</div>
-              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>Pending Documents</div>
+              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.onHold}</div>
+              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>On Hold</div>
             </div>
           </div>
         </Card>
@@ -413,6 +427,16 @@ const Applications = () => {
               containerStyle={{ marginBottom: 0 }}
             />
           </div>
+          <div style={{ width: isMobile ? '100%' : '200px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <span style={{ fontSize: '13px', fontWeight: '500', color: colors.textSecondary }}>Stage</span>
+            <Select
+              value={stageFilter}
+              onChange={(e) => setStageFilter(e.target.value)}
+              options={[{ value: '', label: 'All Stages' }, ...stageOptions]}
+              placeholder="Filter by stage"
+              containerStyle={{ marginBottom: 0 }}
+            />
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: isMobile ? '100%' : 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: colors.textSecondary }}>
               <span style={{ fontSize: '13px', fontWeight: '500' }}>Date Range:</span>
@@ -447,7 +471,7 @@ const Applications = () => {
             columns={columns}
             data={filteredApplications}
             loading={loading}
-            onRowClick={(app) => navigate(`/applications/${app.id}`)}
+            onRowClick={(app) => navigate(`/applications/${app.id}`, { state: { leadId: app.leadId } })}
             emptyMessage="No applications found"
           />
         </div>
@@ -459,6 +483,7 @@ const Applications = () => {
         onClose={() => {
           setShowAddNoteModal(false);
           setNoteContent('');
+          setSelectedApplication(null);
         }}
         title="Add Application Note"
         size="small"
@@ -467,10 +492,13 @@ const Applications = () => {
             <Button variant="ghost" onClick={() => {
               setShowAddNoteModal(false);
               setNoteContent('');
+              setSelectedApplication(null);
             }}>
               Cancel
             </Button>
-            <Button onClick={handleSaveNote}>Save Note</Button>
+            <Button onClick={handleSaveNote} disabled={savingAction}>
+              {savingAction ? 'Saving...' : 'Save Note'}
+            </Button>
           </>
         }
       >
@@ -493,6 +521,64 @@ const Applications = () => {
               resize: 'vertical'
             }}
           />
+        </div>
+      </Modal>
+
+      {/* Update Status Modal */}
+      <Modal
+        isOpen={showStatusModal}
+        onClose={() => {
+          setShowStatusModal(false);
+          setNewStatus('');
+          setStatusRemarks('');
+          setSelectedApplication(null);
+        }}
+        title="Update Application Status"
+        size="small"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => {
+              setShowStatusModal(false);
+              setNewStatus('');
+              setStatusRemarks('');
+              setSelectedApplication(null);
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveStatus} disabled={savingAction || !newStatus}>
+              {savingAction ? 'Saving...' : 'Update Status'}
+            </Button>
+          </>
+        }
+      >
+        <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <Select
+            label="New Status"
+            value={newStatus}
+            onChange={(e) => setNewStatus(e.target.value)}
+            options={statusOptions}
+            containerStyle={{ marginBottom: 0 }}
+          />
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: colors.textPrimary, fontWeight: '500' }}>
+              Remarks (optional)
+            </label>
+            <textarea
+              value={statusRemarks}
+              onChange={(e) => setStatusRemarks(e.target.value)}
+              placeholder="Why is the status changing?"
+              style={{
+                width: '100%',
+                minHeight: '90px',
+                padding: '12px',
+                borderRadius: '8px',
+                border: `1px solid ${colors.borderLight}`,
+                fontSize: '14px',
+                fontFamily: 'inherit',
+                resize: 'vertical'
+              }}
+            />
+          </div>
         </div>
       </Modal>
     </div>

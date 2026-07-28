@@ -39,7 +39,10 @@ const Login = () => {
     setError('');
 
     try {
-      await login(formData.identifier, formData.password);
+      await login({
+        [loginMethod]: formData.identifier,
+        password: formData.password,
+      });
       navigate('/dashboard');
     } catch (err) {
       setError(err.message || 'Login failed. Please try again.');
@@ -340,23 +343,6 @@ const Login = () => {
             Don't have an account?{' '}
             <Link to="/register" style={linkStyle}>Sign up</Link>
           </p>
-
-          {/* Demo Credentials */}
-          <div style={{
-            marginTop: '32px',
-            padding: '16px',
-            backgroundColor: colors.appBg,
-            borderRadius: '10px',
-            fontSize: '13px',
-          }}>
-            <p style={{ margin: '0 0 8px 0', fontWeight: '600', color: colors.textPrimary }}>Demo Credentials:</p>
-            <p style={{ margin: '0 0 4px 0', color: colors.textSecondary }}>
-              Email: <code style={{ backgroundColor: colors.contentSurface, padding: '2px 6px', borderRadius: '4px' }}>admin@scolcrm.com</code>
-            </p>
-            <p style={{ margin: 0, color: colors.textSecondary }}>
-              Password: <code style={{ backgroundColor: colors.contentSurface, padding: '2px 6px', borderRadius: '4px' }}>admin123</code>
-            </p>
-          </div>
         </div>
       </div>
     </div>

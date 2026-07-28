@@ -1,4 +1,5 @@
-// API Simulation Services
+// API Simulation Services (Universities/Courses/Dashboard/Lookups still mocked -
+// no backend support for these yet) + real CRM Leads service.
 import {
   countries,
   states,
@@ -13,115 +14,106 @@ import {
   courses,
   courseIntakes,
   universityIntakes,
-  leadAcademicResults,
-  leadEnglishTestResults,
   detailedCourses,
 } from '../mockData';
+import { api, extractList } from './apiClient';
+import { LEAD_STATUS } from './mappers';
 
 // Import additional services
-export { applicationService, journeyService, taskService, reportService } from './applicationService';
+export { applicationService, taskService, reportService } from './applicationService';
 export { authService } from './authService';
 
-// Simulate API delay
+// Simulate API delay (mock-only services below)
 const delay = (ms = 300) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Lead Services
+const normalizeLead = (raw) => ({
+  id: raw.id ?? raw.leadId,
+  fullName: raw.name ?? raw.fullName ?? null,
+  phone: raw.phone ?? null,
+  email: raw.email ?? null,
+  address: raw.address ?? null,
+  city: raw.city ?? null,
+  gender: raw.gender ?? null,
+  targetCountryId: raw.targetCountryId ?? null,
+  targetCountry: raw.targetCountry ?? raw.targetCountryName ?? raw.country?.name ?? null,
+  consultantId: raw.consultantId ?? null,
+  consultantName: raw.consultantName ?? raw.consultant?.name ?? null,
+  registerSource: raw.registerSource ?? null,
+  status: raw.leadStatus ?? raw.status ?? null,
+  hasPassedEnglishTest: raw.hasPassedEnglishTest ?? raw.englishTestPassed ?? false,
+  enrollmentStatus: raw.enrollmentStatus ?? null,
+  createdAt: raw.createdAt ?? null,
+  _raw: raw,
+});
+
+// Lead Services - backed by CRM Leads endpoints
 export const leadService = {
-  async getAll() {
-    await delay();
-    return leadProfiles.map(lead => {
-      const user = users.find(u => u.id === lead.userId);
-      return {
-        ...lead,
-        email: user?.email || null,
-        phone: user?.phone || null,
-      };
+  async getAll({ searchText, filters, ranges, pagination } = {}) {
+    const data = await api.post('/crm/leads/list', {
+      ...(searchText ? { searchText } : {}),
+      ...(filters ? { filters } : {}),
+      ...(ranges ? { ranges } : {}),
+      pagination: pagination ?? { limit: 50 },
     });
+    const { items, pagination: nextPagination } = extractList(data, ['leads']);
+    return { leads: items.map(normalizeLead), pagination: nextPagination };
   },
 
+  // No GET /crm/leads/{id} on the backend - best-effort fallback for direct
+  // URL visits (LeadDetails prefers router state from the list navigation).
   async getById(id) {
-    await delay();
-    const lead = leadProfiles.find(l => l.id === id);
-    if (!lead) return null;
+    const { leads } = await this.getAll();
+    return leads.find((lead) => lead.id === id) ?? null;
+  },
 
-    const user = users.find(u => u.id === lead.userId);
-    const academics = leadAcademicResults.filter(a => a.leadId === id);
-    const englishResults = leadEnglishTestResults.filter(e => e.leadId === id);
-
-    return {
-      ...lead,
-      email: user?.email || null,
-      phone: user?.phone || null,
-      academicResults: academics.map(a => ({
-        ...a,
-        degree: academicDegrees.find(d => d.id === a.sysDegreeId),
-      })),
-      englishTestResults: englishResults.map(e => ({
-        ...e,
-        test: englishTests.find(t => t.id === e.sysEngTestId),
-      })),
+  async create(formData) {
+    const payload = {
+      name: formData.fullName,
+      phone: formData.phone,
+      ...(formData.email ? { email: formData.email } : {}),
+      ...(formData.address ? { address: formData.address } : {}),
+      ...(formData.city ? { city: formData.city } : {}),
+      ...(formData.gender ? { gender: formData.gender } : {}),
+      ...(formData.targetCountryId ? { targetCountryId: formData.targetCountryId } : {}),
+      ...(formData.consultantId ? { consultantId: formData.consultantId } : {}),
+      ...(formData.registerSource ? { registerSource: formData.registerSource } : {}),
+      ...(formData.leadStatus ? { leadStatus: formData.leadStatus } : {}),
+      hasPassedEnglishTest: !!formData.hasPassedEnglishTest,
     };
+    const data = await api.post('/crm/leads', payload);
+    return normalizeLead(data ?? payload);
   },
 
-  async create(leadData) {
-    await delay();
-    const newId = `lp${leadProfiles.length + 1}`;
-    const newUserId = `u${users.length + 1}`;
-
-    const newLead = {
-      id: newId,
-      userId: newUserId,
-      fullName: leadData.fullName,
-      dob: leadData.dob || null,
-      gender: leadData.gender || null,
-      address: leadData.address || null,
-      city: leadData.city || null,
-      imgUrl: null,
-      status: 'eligible',
-      targetCountry: leadData.targetCountry || null,
-      consultantName: leadData.consultantName || null,
-      englishTestPassed: leadData.englishTestPassed || false,
-      email: leadData.email || null,
-      phone: leadData.phone,
+  async update(id, formData) {
+    const payload = {
+      name: formData.fullName,
+      phone: formData.phone,
+      ...(formData.email ? { email: formData.email } : {}),
+      ...(formData.address ? { address: formData.address } : {}),
+      ...(formData.city ? { city: formData.city } : {}),
+      ...(formData.gender ? { gender: formData.gender } : {}),
+      ...(formData.targetCountryId ? { targetCountryId: formData.targetCountryId } : {}),
+      ...(formData.consultantId ? { consultantId: formData.consultantId } : {}),
+      ...(formData.registerSource ? { registerSource: formData.registerSource } : {}),
+      ...(formData.leadStatus ? { leadStatus: formData.leadStatus } : {}),
+      ...(formData.enrollmentStatus ? { enrollmentStatus: formData.enrollmentStatus } : {}),
+      hasPassedEnglishTest: !!formData.hasPassedEnglishTest,
     };
-
-    return newLead;
+    const data = await api.put(`/crm/leads/${id}`, payload);
+    return normalizeLead(data ?? { id, ...payload });
   },
 
-  async update(id, leadData) {
-    await delay();
-    const index = leadProfiles.findIndex(l => l.id === id);
-    if (index === -1) return null;
-
-    return { ...leadProfiles[index], ...leadData };
-  },
-
-  async delete(id) {
-    await delay();
-    return { success: true };
-  },
-
-  async search(query) {
-    await delay();
-    const lowerQuery = query.toLowerCase();
-    return leadProfiles
-      .map(lead => {
-        const user = users.find(u => u.id === lead.userId);
-        return {
-          ...lead,
-          email: user?.email || null,
-          phone: user?.phone || null,
-        };
-      })
-      .filter(lead =>
-        lead.fullName?.toLowerCase().includes(lowerQuery) ||
-        lead.email?.toLowerCase().includes(lowerQuery) ||
-        lead.phone?.includes(query)
-      );
+  // Countries + consultants for the Target Country / Consultant selects.
+  async getDropdownData() {
+    const data = await api.get('/crm/leads/dropdown-data');
+    const raw = data ?? {};
+    const countries = raw.countries ?? raw.targetCountries ?? [];
+    const consultants = raw.consultants ?? raw.counselors ?? [];
+    return { countries, consultants, leadStatuses: LEAD_STATUS.options };
   },
 };
 
-// University Services
+// University Services (mock - no backend endpoints yet)
 export const universityService = {
   async getAll() {
     await delay();
@@ -186,7 +178,7 @@ export const universityService = {
   },
 };
 
-// Course Services
+// Course Services (mock - no backend endpoints yet)
 export const courseService = {
   async getAll() {
     await delay();
@@ -222,7 +214,7 @@ export const detailedCourseService = {
   }
 };
 
-// Dashboard Statistics Services
+// Dashboard Statistics Services (mock - no backend endpoints yet)
 export const dashboardService = {
   async getStats() {
     await delay();
@@ -308,7 +300,7 @@ export const dashboardService = {
   },
 };
 
-// Lookup Services
+// Lookup Services (mock - no backend endpoints yet)
 export const lookupService = {
   async getCountries() {
     await delay(100);

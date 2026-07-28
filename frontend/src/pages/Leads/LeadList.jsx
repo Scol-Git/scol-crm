@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Edit2, Eye } from 'lucide-react';
 import { Card, Table, Button, Badge, SearchInput, Modal, Input, Select } from '../../components';
 import { leadService } from '../../services';
+import { LEAD_STATUS, leadStatusVariant, REGISTER_SOURCE, GENDER_OPTIONS } from '../../services/mappers';
 import { colors } from '../../theme';
 
 const LeadList = () => {
@@ -15,6 +16,8 @@ const LeadList = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedLead, setSelectedLead] = useState(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [countries, setCountries] = useState([]);
+  const [consultants, setConsultants] = useState([]);
   const [formData, setFormData] = useState({
     fullName: '',
     phone: '',
@@ -22,9 +25,11 @@ const LeadList = () => {
     address: '',
     city: '',
     gender: '',
-    targetCountry: '',
-    consultantName: '',
-    englishTestPassed: 'false',
+    targetCountryId: '',
+    consultantId: '',
+    registerSource: 'Offline',
+    leadStatus: 'NewLead',
+    hasPassedEnglishTest: 'false',
   });
   const [filters, setFilters] = useState({
     dateFrom: '',
@@ -37,6 +42,7 @@ const LeadList = () => {
 
   useEffect(() => {
     loadLeads();
+    loadDropdownData();
 
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
@@ -51,13 +57,23 @@ const LeadList = () => {
 
   const loadLeads = async () => {
     try {
-      const data = await leadService.getAll();
+      const { leads: data } = await leadService.getAll();
       setLeads(data);
       setFilteredLeads(data);
     } catch (error) {
       console.error('Failed to load leads:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadDropdownData = async () => {
+    try {
+      const { countries: countryList, consultants: consultantList } = await leadService.getDropdownData();
+      setCountries(countryList);
+      setConsultants(consultantList);
+    } catch (error) {
+      console.error('Failed to load lead dropdown data:', error);
     }
   };
 
@@ -93,11 +109,11 @@ const LeadList = () => {
       filtered = filtered.filter(lead => lead && lead.status === filters.status);
     }
     if (filters.country) {
-      filtered = filtered.filter(lead => lead && lead.targetCountry === filters.country);
+      filtered = filtered.filter(lead => lead && lead.targetCountryId === filters.country);
     }
     if (filters.englishTest) {
       const isPassed = filters.englishTest === 'true';
-      filtered = filtered.filter(lead => lead && !!lead.englishTestPassed === isPassed);
+      filtered = filtered.filter(lead => lead && !!lead.hasPassedEnglishTest === isPassed);
     }
 
     setFilteredLeads(filtered);
@@ -131,10 +147,13 @@ const LeadList = () => {
     if (!validateForm()) return;
 
     try {
-      const newLead = await leadService.create(formData);
-      setLeads((prev) => [newLead, ...prev]);
+      await leadService.create({
+        ...formData,
+        hasPassedEnglishTest: formData.hasPassedEnglishTest === 'true',
+      });
       setShowAddModal(false);
       resetForm();
+      loadLeads();
     } catch (error) {
       console.error('Failed to create lead:', error);
     }
@@ -144,12 +163,13 @@ const LeadList = () => {
     if (!validateForm()) return;
 
     try {
-      await leadService.update(selectedLead.id, formData);
-      setLeads((prev) =>
-        prev.map((lead) => (lead.id === selectedLead.id ? { ...lead, ...formData } : lead))
-      );
+      await leadService.update(selectedLead.id, {
+        ...formData,
+        hasPassedEnglishTest: formData.hasPassedEnglishTest === 'true',
+      });
       setShowEditModal(false);
       resetForm();
+      loadLeads();
     } catch (error) {
       console.error('Failed to update lead:', error);
     }
@@ -164,10 +184,12 @@ const LeadList = () => {
       address: lead.address || '',
       city: lead.city || '',
       gender: lead.gender || '',
-      targetCountry: lead.targetCountry || '',
-      consultantName: lead.consultantName || '',
-      englishTestPassed: lead.englishTestPassed ? 'true' : 'false',
-      status: lead.status || 'eligible',
+      targetCountryId: lead.targetCountryId || '',
+      consultantId: lead.consultantId || '',
+      registerSource: lead.registerSource || 'Offline',
+      leadStatus: lead.status || 'NewLead',
+      hasPassedEnglishTest: lead.hasPassedEnglishTest ? 'true' : 'false',
+      enrollmentStatus: lead.enrollmentStatus || '',
     });
     setShowEditModal(true);
   };
@@ -180,9 +202,11 @@ const LeadList = () => {
       address: '',
       city: '',
       gender: '',
-      targetCountry: '',
-      consultantName: '',
-      englishTestPassed: 'false',
+      targetCountryId: '',
+      consultantId: '',
+      registerSource: 'Offline',
+      leadStatus: 'NewLead',
+      hasPassedEnglishTest: 'false',
     });
     setErrors({});
     setSelectedLead(null);
@@ -221,7 +245,7 @@ const LeadList = () => {
     {
       title: 'Status',
       dataIndex: 'status',
-      render: (value) => <Badge variant={value}>{value}</Badge>,
+      render: (value) => <Badge variant={leadStatusVariant(value)}>{LEAD_STATUS.label(value)}</Badge>,
     },
     {
       title: '',
@@ -230,7 +254,7 @@ const LeadList = () => {
         <button
           onClick={(e) => {
             e.stopPropagation();
-            navigate(`/leads/${row.id}`);
+            navigate(`/leads/${row.id}`, { state: { lead: row } });
           }}
           style={{
             padding: '6px',
@@ -285,21 +309,21 @@ const LeadList = () => {
     {
       title: 'Status',
       dataIndex: 'status',
-      render: (value) => <Badge variant={value} style={{ textTransform: 'capitalize' }}>{value}</Badge>,
+      render: (value) => <Badge variant={leadStatusVariant(value)}>{LEAD_STATUS.label(value)}</Badge>,
     },
     {
       title: 'Target Country',
-      dataIndex: 'targetCountry',
-      render: (value) => value || '-',
+      dataIndex: 'targetCountryId',
+      render: (value, row) => row.targetCountry || countries.find((c) => c.id === value)?.name || '-',
     },
     {
       title: 'Consultant',
-      dataIndex: 'consultantName',
-      render: (value) => value || '-',
+      dataIndex: 'consultantId',
+      render: (value, row) => row.consultantName || consultants.find((c) => c.id === value)?.name || '-',
     },
     {
       title: 'English Test',
-      dataIndex: 'englishTestPassed',
+      dataIndex: 'hasPassedEnglishTest',
       render: (value) => (
         <Badge variant={value ? 'success' : 'error'}>
           {value ? 'Passed' : 'No'}
@@ -314,7 +338,7 @@ const LeadList = () => {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              navigate(`/leads/${row.id}`);
+              navigate(`/leads/${row.id}`, { state: { lead: row } });
             }}
             style={{
               padding: '6px',
@@ -350,19 +374,9 @@ const LeadList = () => {
     },
   ];
 
-  const genderOptions = [
-    { value: 'male', label: 'Male' },
-    { value: 'female', label: 'Female' },
-    { value: 'other', label: 'Other' },
-  ];
-
-  const statusOptions = [
-    { value: 'eligible', label: 'Eligible' },
-    { value: 'not eligible', label: 'Not Eligible' },
-    { value: 'unreachable', label: 'Unreachable' },
-    { value: 'visited', label: 'Visited' },
-    { value: 'applied', label: 'Applied' },
-  ];
+  const genderOptions = GENDER_OPTIONS;
+  const statusOptions = LEAD_STATUS.options;
+  const registerSourceOptions = REGISTER_SOURCE.options;
 
   const booleanOptions = [
     { value: 'true', label: 'Yes' },
@@ -441,10 +455,7 @@ const LeadList = () => {
             onChange={(e) => setFilters(prev => ({ ...prev, country: e.target.value }))}
             options={[
               { value: '', label: 'All Countries' },
-              { value: 'United Kingdom', label: 'United Kingdom' },
-              { value: 'United States', label: 'United States' },
-              { value: 'Canada', label: 'Canada' },
-              { value: 'Australia', label: 'Australia' }
+              ...countries.map((c) => ({ value: c.id, label: c.name })),
             ]}
             containerStyle={{ marginBottom: 0 }}
           />
@@ -467,7 +478,7 @@ const LeadList = () => {
             columns={columns}
             data={filteredLeads}
             loading={loading}
-            onRowClick={(lead) => navigate(`/leads/${lead.id}`)}
+            onRowClick={(lead) => navigate(`/leads/${lead.id}`, { state: { lead } })}
             emptyMessage="No leads found"
           />
         </div>
@@ -545,24 +556,40 @@ const LeadList = () => {
             options={genderOptions}
             placeholder="Select gender"
           />
-          <Input
+          <Select
             label="Target Country"
-            name="targetCountry"
-            value={formData.targetCountry}
+            name="targetCountryId"
+            value={formData.targetCountryId}
             onChange={handleInputChange}
-            placeholder="Enter target country"
+            options={countries.map((c) => ({ value: c.id, label: c.name }))}
+            placeholder="Select target country"
           />
-          <Input
-            label="Consultant Name"
-            name="consultantName"
-            value={formData.consultantName}
+          <Select
+            label="Consultant"
+            name="consultantId"
+            value={formData.consultantId}
             onChange={handleInputChange}
-            placeholder="Enter consultant name"
+            options={consultants.map((c) => ({ value: c.id, label: c.name }))}
+            placeholder="Select consultant"
+          />
+          <Select
+            label="Register Source"
+            name="registerSource"
+            value={formData.registerSource}
+            onChange={handleInputChange}
+            options={registerSourceOptions}
+          />
+          <Select
+            label="Lead Status"
+            name="leadStatus"
+            value={formData.leadStatus}
+            onChange={handleInputChange}
+            options={statusOptions}
           />
           <Select
             label="English Test Passed"
-            name="englishTestPassed"
-            value={formData.englishTestPassed}
+            name="hasPassedEnglishTest"
+            value={formData.hasPassedEnglishTest}
             onChange={handleInputChange}
             options={booleanOptions}
           />
@@ -643,30 +670,39 @@ const LeadList = () => {
           />
           <Select
             label="Status"
-            name="status"
-            value={formData.status}
+            name="leadStatus"
+            value={formData.leadStatus}
             onChange={handleInputChange}
             options={statusOptions}
             placeholder="Select status"
           />
-          <Input
+          <Select
             label="Target Country"
-            name="targetCountry"
-            value={formData.targetCountry}
+            name="targetCountryId"
+            value={formData.targetCountryId}
             onChange={handleInputChange}
-            placeholder="Enter target country"
+            options={countries.map((c) => ({ value: c.id, label: c.name }))}
+            placeholder="Select target country"
           />
-          <Input
-            label="Consultant Name"
-            name="consultantName"
-            value={formData.consultantName}
+          <Select
+            label="Consultant"
+            name="consultantId"
+            value={formData.consultantId}
             onChange={handleInputChange}
-            placeholder="Enter consultant name"
+            options={consultants.map((c) => ({ value: c.id, label: c.name }))}
+            placeholder="Select consultant"
+          />
+          <Select
+            label="Register Source"
+            name="registerSource"
+            value={formData.registerSource}
+            onChange={handleInputChange}
+            options={registerSourceOptions}
           />
           <Select
             label="English Test Passed"
-            name="englishTestPassed"
-            value={formData.englishTestPassed}
+            name="hasPassedEnglishTest"
+            value={formData.hasPassedEnglishTest}
             onChange={handleInputChange}
             options={booleanOptions}
           />

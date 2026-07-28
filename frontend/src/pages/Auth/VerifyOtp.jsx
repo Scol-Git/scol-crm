@@ -2,13 +2,15 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, CheckCircle } from 'lucide-react';
 import { authService } from '../../services/authService';
+import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../theme';
 import logoRed from '../../assets/Logo/logo_red.png';
 
 const VerifyOtp = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { phone, sessionId, purpose = 'verify' } = location.state || {};
+  const { completeOtpVerification } = useAuth();
+  const { phone, otpAccessToken } = location.state || {};
 
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
@@ -20,8 +22,8 @@ const VerifyOtp = () => {
   const inputRefs = useRef([]);
 
   useEffect(() => {
-    // Redirect if no phone number
-    if (!phone) {
+    // Redirect if there's no OTP session to verify
+    if (!otpAccessToken) {
       navigate('/login');
       return;
     }
@@ -42,7 +44,7 @@ const VerifyOtp = () => {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [phone, navigate]);
+  }, [otpAccessToken, navigate]);
 
   const handleChange = (index, value) => {
     // Only allow digits
@@ -95,16 +97,13 @@ const VerifyOtp = () => {
     setError('');
 
     try {
-      await authService.verifyOtp(phone, otpValue);
+      await completeOtpVerification(otpAccessToken, otpValue);
       setSuccess(true);
 
-      // Navigate based on purpose
+      // Both register (phone_verify) and password_reset purposes return
+      // full auth tokens from the backend - the user is already logged in.
       setTimeout(() => {
-        if (purpose === 'register') {
-          navigate('/login', { state: { message: 'Phone verified successfully. You can now login.' } });
-        } else {
-          navigate('/dashboard');
-        }
+        navigate('/dashboard');
       }, 1500);
     } catch (err) {
       setError(err.message || 'Invalid OTP. Please try again.');
@@ -120,7 +119,7 @@ const VerifyOtp = () => {
     if (!canResend) return;
 
     try {
-      await authService.sendOtp(phone, purpose);
+      await authService.resendOtp(otpAccessToken);
       setCanResend(false);
       setResendTimer(30);
       setError('');
