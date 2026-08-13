@@ -1,9 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Edit2, Mail, Phone, MapPin, Calendar, GraduationCap, FileText } from 'lucide-react';
-import { Card, Button, Badge, Modal, Input, Select } from '../../components';
-import { leadService } from '../../services';
-import { LEAD_STATUS, leadStatusVariant, REGISTER_SOURCE, GENDER_OPTIONS } from '../../services/mappers';
+import { Card, Button, Badge, Modal, Input, Select, Alert } from '../../components';
+import { leadService, applicationService } from '../../services';
+import {
+  LEAD_STATUS,
+  leadStatusVariant,
+  REGISTER_SOURCE,
+  GENDER_OPTIONS,
+  APPLICATION_STATUS,
+  applicationStatusVariant,
+  APPLICATION_STAGE,
+  applicationStageVariant,
+} from '../../services/mappers';
 import { colors } from '../../theme';
 
 const statusOptions = LEAD_STATUS.options;
@@ -25,6 +34,11 @@ const LeadDetails = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [countries, setCountries] = useState([]);
   const [consultants, setConsultants] = useState([]);
+  const [error, setError] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [applications, setApplications] = useState([]);
+  const [applicationsLoading, setApplicationsLoading] = useState(true);
   const [formData, setFormData] = useState({
     fullName: '',
     phone: '',
@@ -43,6 +57,7 @@ const LeadDetails = () => {
   useEffect(() => {
     loadLead();
     loadDropdownData();
+    loadApplications();
 
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
@@ -69,17 +84,32 @@ const LeadDetails = () => {
   };
 
   const loadLead = async () => {
+    setError('');
     try {
       // Prefer the lead passed via navigation state (from the Leads list) -
       // the backend has no GET-by-id endpoint, so a direct URL visit falls
-      // back to fetching the full list and matching by id.
+      // back to paging through the list and matching by id.
       const data = location.state?.lead ?? await leadService.getById(id);
       setLead(data);
       if (data) populateForm(data);
-    } catch (error) {
-      console.error('Failed to load lead:', error);
+      else setError('This lead could not be found.');
+    } catch (err) {
+      console.error('Failed to load lead:', err);
+      setError(err.message || 'Failed to load this lead.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadApplications = async () => {
+    setApplicationsLoading(true);
+    try {
+      setApplications(await applicationService.getByLead(id));
+    } catch (err) {
+      console.error('Failed to load lead applications:', err);
+      setApplications([]);
+    } finally {
+      setApplicationsLoading(false);
     }
   };
 
@@ -88,8 +118,9 @@ const LeadDetails = () => {
       const { countries: countryList, consultants: consultantList } = await leadService.getDropdownData();
       setCountries(countryList);
       setConsultants(consultantList);
-    } catch (error) {
-      console.error('Failed to load lead dropdown data:', error);
+    } catch (err) {
+      console.error('Failed to load lead dropdown data:', err);
+      setError(err.message || 'Failed to load country/consultant options.');
     }
   };
 
@@ -114,6 +145,8 @@ const LeadDetails = () => {
 
   const handleEditLead = async () => {
     if (!validateForm()) return;
+    setSaving(true);
+    setSaveError('');
     try {
       const updated = await leadService.update(id, {
         ...formData,
@@ -122,8 +155,11 @@ const LeadDetails = () => {
       setLead(updated);
       populateForm(updated);
       setShowEditModal(false);
-    } catch (error) {
-      console.error('Failed to update lead:', error);
+    } catch (err) {
+      console.error('Failed to update lead:', err);
+      setSaveError(err.message || 'Failed to update lead. Please try again.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -137,8 +173,9 @@ const LeadDetails = () => {
 
   if (!lead) {
     return (
-      <div style={{ textAlign: 'center', padding: '40px' }}>
+      <div style={{ maxWidth: '520px', margin: '40px auto', textAlign: 'center' }}>
         <h2 style={{ color: colors.textPrimary }}>Lead not found</h2>
+        {error && <Alert variant="error" style={{ textAlign: 'left', marginTop: '16px' }}>{error}</Alert>}
         <Button onClick={() => navigate('/leads')} style={{ marginTop: '16px' }}>
           Back to Leads
         </Button>
@@ -199,6 +236,8 @@ const LeadDetails = () => {
         <ArrowLeft size={18} />
         Back to Leads
       </button>
+
+      <Alert variant="error" onDismiss={() => setError('')}>{error}</Alert>
 
       {/* Profile Header */}
       <Card style={{ marginBottom: '24px' }} padding="0">
@@ -386,33 +425,86 @@ const LeadDetails = () => {
           )}
         </Card>
 
-        {/* Applications pointer - per-application activity lives on the Applications page */}
+        {/* This lead's applications - GET /crm/leads/{leadId}/applications */}
         <Card title="Applications">
-          <div style={{ textAlign: 'center', padding: '24px', color: colors.textSecondary }}>
-            <p>View this lead's applications, stage progress, and notes from the Applications page.</p>
-            <p style={{ fontSize: '14px' }}>Lead Status: <Badge variant={leadStatusVariant(lead.status)}>{LEAD_STATUS.label(lead.status)}</Badge></p>
-            <Button variant="secondary" size="small" style={{ marginTop: '12px' }} onClick={() => navigate('/applications')}>
-              Go to Applications
-            </Button>
-          </div>
+          {applicationsLoading ? (
+            <div style={{ textAlign: 'center', padding: '24px', color: colors.textSecondary }}>
+              Loading applications...
+            </div>
+          ) : applications.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {applications.map((app) => (
+                <button
+                  key={app.id}
+                  onClick={() => navigate(`/applications/${app.id}`, { state: { leadId: id } })}
+                  style={{
+                    display: 'flex',
+                    flexDirection: isMobile ? 'column' : 'row',
+                    alignItems: isMobile ? 'flex-start' : 'center',
+                    justifyContent: 'space-between',
+                    gap: '8px',
+                    width: '100%',
+                    padding: '12px 16px',
+                    backgroundColor: colors.appBg,
+                    border: `1px solid ${colors.borderLight}`,
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: '500', color: colors.textPrimary }}>
+                      {app.course?.courseName || 'Application'}
+                    </div>
+                    <div style={{ fontSize: '12px', color: colors.textSecondary }}>
+                      {app.university?.uniName || '-'}
+                      {app.appliedDate ? ` · ${new Date(app.appliedDate).toLocaleDateString()}` : ''}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap' }}>
+                    <Badge variant={applicationStatusVariant(app.status)} size="small">
+                      {APPLICATION_STATUS.label(app.status)}
+                    </Badge>
+                    {app.stage && (
+                      <Badge variant={applicationStageVariant(app.stage)} size="small">
+                        {APPLICATION_STAGE.label(app.stage)}
+                      </Badge>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '24px', color: colors.textSecondary }}>
+              <FileText size={40} style={{ marginBottom: '8px', opacity: 0.5 }} />
+              <p>No applications for this lead yet.</p>
+              <Button variant="secondary" size="small" style={{ marginTop: '12px' }} onClick={() => navigate('/applications')}>
+                Go to Applications
+              </Button>
+            </div>
+          )}
         </Card>
       </div>
 
       {/* Edit Lead Modal */}
       <Modal
         isOpen={showEditModal}
-        onClose={() => setShowEditModal(false)}
+        onClose={() => { setShowEditModal(false); setSaveError(''); }}
         title="Edit Lead Details"
         size="medium"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setShowEditModal(false)}>
+            <Button variant="ghost" onClick={() => { setShowEditModal(false); setSaveError(''); }}>
               Cancel
             </Button>
-            <Button onClick={handleEditLead}>Update Lead</Button>
+            <Button onClick={handleEditLead} disabled={saving}>
+              {saving ? 'Updating...' : 'Update Lead'}
+            </Button>
           </>
         }
       >
+        <Alert variant="error" onDismiss={() => setSaveError('')}>{saveError}</Alert>
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
           <div style={{ gridColumn: '1 / -1' }}>
             <Input

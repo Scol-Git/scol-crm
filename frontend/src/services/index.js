@@ -46,24 +46,60 @@ const normalizeLead = (raw) => ({
   _raw: raw,
 });
 
+// Backend caps pagination.limit at 50 (CursorPaginationDto).
+const PAGE_LIMIT = 50;
+
+// Maps the UI's flat filter state onto CrmLeadFiltersDto / CrmLeadRangesDto /
+// CrmLeadFlagsDto. Empty values are omitted so we never send empty arrays.
+export const buildLeadQuery = ({ searchText, status, countryId, consultantId, englishTest, dateFrom, dateTo } = {}) => {
+  const filters = {};
+  if (status) filters.leadStatuses = [status];
+  if (countryId) filters.targetCountryIds = [countryId];
+  if (consultantId) filters.consultantIds = [consultantId];
+
+  const ranges = {};
+  if (dateFrom) ranges.startDate = dateFrom;
+  if (dateTo) ranges.endDate = dateTo;
+
+  const flags = {};
+  if (englishTest === 'true' || englishTest === true) flags.hasPassedEnglishTest = true;
+  if (englishTest === 'false' || englishTest === false) flags.hasPassedEnglishTest = false;
+
+  return {
+    ...(searchText?.trim() ? { searchText: searchText.trim() } : {}),
+    ...(Object.keys(filters).length ? { filters } : {}),
+    ...(Object.keys(ranges).length ? { ranges } : {}),
+    ...(Object.keys(flags).length ? { flags } : {}),
+  };
+};
+
 // Lead Services - backed by CRM Leads endpoints
 export const leadService = {
-  async getAll({ searchText, filters, ranges, pagination } = {}) {
+  async getAll({ searchText, filters, ranges, flags, cursor, limit } = {}) {
     const data = await api.post('/crm/leads/list', {
       ...(searchText ? { searchText } : {}),
       ...(filters ? { filters } : {}),
       ...(ranges ? { ranges } : {}),
-      pagination: pagination ?? { limit: 50 },
+      ...(flags ? { flags } : {}),
+      pagination: { limit: limit ?? PAGE_LIMIT, ...(cursor ? { cursor } : {}) },
     });
-    const { items, pagination: nextPagination } = extractList(data, ['leads']);
-    return { leads: items.map(normalizeLead), pagination: nextPagination };
+    const { items, pagination } = extractList(data, ['leads']);
+    return { leads: items.map(normalizeLead), pagination };
   },
 
-  // No GET /crm/leads/{id} on the backend - best-effort fallback for direct
-  // URL visits (LeadDetails prefers router state from the list navigation).
-  async getById(id) {
-    const { leads } = await this.getAll();
-    return leads.find((lead) => lead.id === id) ?? null;
+  // No GET /crm/leads/{id} on the backend yet. Until it lands, walk the cursor
+  // instead of only checking the first page - previously any lead past row 50
+  // was unreachable by direct URL. Bounded so a bad id can't loop forever.
+  async getById(id, { maxPages = 20 } = {}) {
+    let cursor = null;
+    for (let page = 0; page < maxPages; page += 1) {
+      const { leads, pagination } = await this.getAll({ cursor });
+      const match = leads.find((lead) => lead.id === id);
+      if (match) return match;
+      if (!pagination?.hasNext || !pagination?.cursor) break;
+      cursor = pagination.cursor;
+    }
+    return null;
   },
 
   async create(formData) {

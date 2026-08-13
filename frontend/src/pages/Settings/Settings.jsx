@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, Bell, Shield, Globe, Palette, Users, Plus } from 'lucide-react';
-import { Card, Button, Input, Select } from '../../components';
+import { Card, Button, Input, Select, Alert } from '../../components';
 import { colors } from '../../theme';
 
 const Settings = () => {
@@ -106,7 +106,7 @@ const Settings = () => {
               A
             </div>
             <div>
-              <Button variant="secondary" size="small">Change Photo</Button>
+              <Button variant="secondary" size="small" disabled>Change Photo</Button>
               <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: colors.textSecondary }}>
                 JPG, GIF or PNG. Max size 2MB.
               </p>
@@ -140,7 +140,7 @@ const Settings = () => {
           options={timezoneOptions}
         />
         <div style={{ gridColumn: '1 / -1', marginTop: '16px' }}>
-          <Button>Save Changes</Button>
+          <Button disabled>Save Changes</Button>
         </div>
       </div>
     </Card>
@@ -233,7 +233,7 @@ const Settings = () => {
             type="password"
             placeholder="Confirm new password"
           />
-          <Button style={{ marginTop: '8px' }}>Update Password</Button>
+          <Button style={{ marginTop: '8px' }} disabled>Update Password</Button>
         </div>
 
         <div style={{
@@ -245,7 +245,7 @@ const Settings = () => {
           <p style={{ color: colors.textSecondary, fontSize: '14px', margin: '0 0 16px 0' }}>
             Add an extra layer of security to your account.
           </p>
-          <Button variant="secondary">Enable 2FA</Button>
+          <Button variant="secondary" disabled>Enable 2FA</Button>
         </div>
       </div>
     </Card>
@@ -287,7 +287,7 @@ const Settings = () => {
           </div>
         </div>
         <div style={{ marginTop: '24px' }}>
-          <Button>Save Preferences</Button>
+          <Button disabled>Save Preferences</Button>
         </div>
       </div>
     </Card>
@@ -308,7 +308,7 @@ const Settings = () => {
               Assign roles to control user access.
             </p>
           </div>
-          <Button icon={Plus}>Add Role</Button>
+          <Button icon={Plus} disabled>Add Role</Button>
         </div>
 
         <div style={{ display: 'grid', gap: '16px' }}>
@@ -333,7 +333,7 @@ const Settings = () => {
                 <span style={{ fontSize: '13px', color: colors.textSecondary, fontWeight: '500' }}>
                   {role.users} Users
                 </span>
-                <Button variant="ghost" size="small">Edit</Button>
+                <Button variant="ghost" size="small" disabled>Edit</Button>
               </div>
             </div>
           ))}
@@ -361,6 +361,14 @@ const Settings = () => {
 
   return (
     <div>
+      {/* Every action on this page needs a backend endpoint that doesn't exist
+          yet (no GET/PUT /users/me, no change-password). The buttons are
+          disabled rather than left inert, so they don't look broken. */}
+      <Alert variant="info">
+        Settings are display-only for now — the backend has no profile,
+        password or preferences endpoints yet, so these controls are disabled.
+      </Alert>
+
       {/* Tabs */}
       <div style={tabContainerStyle}>
         {tabs.map((tab) => {

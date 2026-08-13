@@ -9,8 +9,9 @@ import {
   Eye,
   GraduationCap
 } from 'lucide-react';
-import { Card, Table, Badge, SearchInput, Button, Select, Modal, Input } from '../../components';
+import { Card, Table, Badge, SearchInput, Button, Select, Modal, Input, Alert } from '../../components';
 import { applicationService } from '../../services';
+import { buildApplicationQuery } from '../../services/applicationService';
 import {
   APPLICATION_STATUS,
   applicationStatusVariant,
@@ -22,11 +23,16 @@ import { colors } from '../../theme';
 const Applications = () => {
   const navigate = useNavigate();
   const [applications, setApplications] = useState([]);
-  const [filteredApplications, setFilteredApplications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [pageInfo, setPageInfo] = useState({ cursor: null, hasNext: false });
+  const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [stageFilter, setStageFilter] = useState('');
+  const [consultantFilter, setConsultantFilter] = useState('');
+  const [consultants, setConsultants] = useState([]);
   const [dateFilters, setDateFilters] = useState({ dateFrom: '', dateTo: '' });
   const [showAddNoteModal, setShowAddNoteModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -38,7 +44,7 @@ const Applications = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
-    loadApplications();
+    loadDropdownData();
 
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
@@ -47,59 +53,73 @@ const Applications = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const loadDropdownData = async () => {
+    try {
+      const { consultants: list } = await applicationService.getDropdownData();
+      setConsultants(list);
+    } catch (err) {
+      // Non-fatal: the consultant filter just stays empty.
+      console.error('Failed to load application dropdown data:', err);
+    }
+  };
+
+  // Search + filters are applied server-side (debounced); any change resets
+  // back to the first page.
   useEffect(() => {
-    filterApplications();
-  }, [searchQuery, statusFilter, stageFilter, dateFilters, applications]);
+    const timer = setTimeout(() => loadApplications(), 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery, statusFilter, stageFilter, consultantFilter, dateFilters.dateFrom, dateFilters.dateTo]);
+
+  const currentQuery = () => buildApplicationQuery({
+    searchText: searchQuery,
+    status: statusFilter,
+    stage: stageFilter,
+    consultantId: consultantFilter,
+    dateFrom: dateFilters.dateFrom,
+    dateTo: dateFilters.dateTo,
+  });
 
   const loadApplications = async () => {
+    setLoading(true);
+    setError('');
     try {
-      const { applications: data } = await applicationService.getAll();
+      const { applications: data, pagination } = await applicationService.getAll(currentQuery());
       setApplications(data);
-      setFilteredApplications(data);
-    } catch (error) {
-      console.error('Failed to load applications:', error);
+      setPageInfo({ cursor: pagination?.cursor ?? null, hasNext: !!pagination?.hasNext });
+    } catch (err) {
+      console.error('Failed to load applications:', err);
+      setError(err.message || 'Failed to load applications.');
+      setApplications([]);
+      setPageInfo({ cursor: null, hasNext: false });
     } finally {
       setLoading(false);
     }
   };
 
-  const filterApplications = () => {
-    let filtered = [...applications];
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (app) =>
-          app.lead?.fullName?.toLowerCase().includes(query) ||
-          app.university?.uniName?.toLowerCase().includes(query) ||
-          app.course?.courseName?.toLowerCase().includes(query)
-      );
+  const loadMore = async () => {
+    if (!pageInfo.hasNext || !pageInfo.cursor) return;
+    setLoadingMore(true);
+    setError('');
+    try {
+      const { applications: data, pagination } = await applicationService.getAll({ ...currentQuery(), cursor: pageInfo.cursor });
+      setApplications((prev) => [...prev, ...data]);
+      setPageInfo({ cursor: pagination?.cursor ?? null, hasNext: !!pagination?.hasNext });
+    } catch (err) {
+      console.error('Failed to load more applications:', err);
+      setError(err.message || 'Failed to load more applications.');
+    } finally {
+      setLoadingMore(false);
     }
-
-    if (statusFilter) {
-      filtered = filtered.filter((app) => app.status === statusFilter);
-    }
-
-    if (stageFilter) {
-      filtered = filtered.filter((app) => app.stage === stageFilter);
-    }
-
-    if (dateFilters.dateFrom) {
-      filtered = filtered.filter((app) => new Date(app.appliedDate) >= new Date(dateFilters.dateFrom));
-    }
-
-    if (dateFilters.dateTo) {
-      const toDate = new Date(dateFilters.dateTo);
-      toDate.setDate(toDate.getDate() + 1);
-      filtered = filtered.filter((app) => new Date(app.appliedDate) < toDate);
-    }
-
-    setFilteredApplications(filtered);
   };
 
   const handleSaveNote = async () => {
     if (!noteContent.trim() || !selectedApplication) return;
+    if (!selectedApplication.leadId) {
+      setActionError('This application has no linked lead id, so the note cannot be saved.');
+      return;
+    }
     setSavingAction(true);
+    setActionError('');
     try {
       await applicationService.addNote(selectedApplication.leadId, selectedApplication.id, {
         description: noteContent.trim(),
@@ -107,8 +127,9 @@ const Applications = () => {
       setShowAddNoteModal(false);
       setNoteContent('');
       setSelectedApplication(null);
-    } catch (error) {
-      console.error('Failed to save note:', error);
+    } catch (err) {
+      console.error('Failed to save note:', err);
+      setActionError(err.message || 'Failed to save note. Please try again.');
     } finally {
       setSavingAction(false);
     }
@@ -116,7 +137,12 @@ const Applications = () => {
 
   const handleSaveStatus = async () => {
     if (!newStatus || !selectedApplication) return;
+    if (!selectedApplication.leadId) {
+      setActionError('This application has no linked lead id, so the status cannot be changed.');
+      return;
+    }
     setSavingAction(true);
+    setActionError('');
     try {
       await applicationService.changeStatus(selectedApplication.leadId, selectedApplication.id, {
         toStatus: newStatus,
@@ -127,8 +153,9 @@ const Applications = () => {
       setStatusRemarks('');
       setSelectedApplication(null);
       loadApplications();
-    } catch (error) {
-      console.error('Failed to update status:', error);
+    } catch (err) {
+      console.error('Failed to update status:', err);
+      setActionError(err.message || 'Failed to update status. Please try again.');
     } finally {
       setSavingAction(false);
     }
@@ -437,6 +464,21 @@ const Applications = () => {
               containerStyle={{ marginBottom: 0 }}
             />
           </div>
+          {consultants.length > 0 && (
+            <div style={{ width: isMobile ? '100%' : '200px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '500', color: colors.textSecondary }}>Consultant</span>
+              <Select
+                value={consultantFilter}
+                onChange={(e) => setConsultantFilter(e.target.value)}
+                options={[
+                  { value: '', label: 'All Consultants' },
+                  ...consultants.map((c) => ({ value: c.id, label: c.name })),
+                ]}
+                placeholder="Filter by consultant"
+                containerStyle={{ marginBottom: 0 }}
+              />
+            </div>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: isMobile ? '100%' : 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: colors.textSecondary }}>
               <span style={{ fontSize: '13px', fontWeight: '500' }}>Date Range:</span>
@@ -460,22 +502,39 @@ const Applications = () => {
           </div>
         </div>
         <div style={{ color: colors.textSecondary, fontSize: '14px', textAlign: isMobile ? 'center' : 'right' }}>
-          {filteredApplications.length} application(s)
+          {applications.length} application(s){pageInfo.hasNext ? ' so far' : ''}
         </div>
       </div>
+
+      {/* Load / filter errors */}
+      <Alert variant="error" onDismiss={() => setError('')}>{error}</Alert>
 
       {/* Applications Table */}
       <Card padding="0">
         <div style={{ overflowX: 'auto' }}>
           <Table
             columns={columns}
-            data={filteredApplications}
+            data={applications}
             loading={loading}
             onRowClick={(app) => navigate(`/applications/${app.id}`, { state: { leadId: app.leadId } })}
             emptyMessage="No applications found"
           />
         </div>
       </Card>
+
+      {/* Cursor pagination - the list endpoint caps each page at 50 rows */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        marginTop: '16px',
+      }}>
+        {pageInfo.hasNext && (
+          <Button variant="ghost" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? 'Loading...' : 'Load more'}
+          </Button>
+        )}
+      </div>
 
       {/* Add Note Modal */}
       <Modal
@@ -503,6 +562,7 @@ const Applications = () => {
         }
       >
         <div style={{ padding: '16px 0' }}>
+          <Alert variant="error" onDismiss={() => setActionError('')}>{actionError}</Alert>
           <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: colors.textPrimary, fontWeight: '500' }}>
             Note Content
           </label>
@@ -552,6 +612,7 @@ const Applications = () => {
         }
       >
         <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <Alert variant="error" onDismiss={() => setActionError('')}>{actionError}</Alert>
           <Select
             label="New Status"
             value={newStatus}

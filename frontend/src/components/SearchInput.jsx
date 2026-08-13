@@ -8,11 +8,13 @@ const SearchInput = ({
   placeholder = 'Search...',
   onSearch,
   className = '',
+  style = {},
 }) => {
   const containerStyle = {
     position: 'relative',
     display: 'flex',
     alignItems: 'center',
+    ...style,
   };
 
   const inputStyle = {

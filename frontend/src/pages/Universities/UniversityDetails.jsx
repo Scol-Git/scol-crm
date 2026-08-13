@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Globe, MapPin, BookOpen, Calendar, DollarSign, Clock, Edit2 } from 'lucide-react';
-import { Card, Button, Badge, Table, Input, Select, Modal } from '../../components';
+import { Card, Button, Badge, Table, Input, Select, Modal, Alert } from '../../components';
 import { universityService, lookupService } from '../../services';
 import { colors } from '../../theme';
 
@@ -10,6 +10,7 @@ const UniversityDetails = () => {
   const navigate = useNavigate();
   const [university, setUniversity] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [showEditModal, setShowEditModal] = useState(false);
   const [countries, setCountries] = useState([]);
@@ -67,8 +68,10 @@ const UniversityDetails = () => {
         const cityData = await lookupService.getCities(data.sysStateId);
         setCities(cityData);
       }
-    } catch (error) {
-      console.error('Failed to load university:', error);
+      setError('');
+    } catch (err) {
+      console.error('Failed to load university:', err);
+      setError(err.message || 'Failed to load this university.');
     } finally {
       setLoading(false);
     }
@@ -196,6 +199,8 @@ const UniversityDetails = () => {
         <ArrowLeft size={18} />
         Back to Universities
       </button>
+
+      <Alert variant="error" onDismiss={() => setError('')}>{error}</Alert>
 
       {/* University Header */}
       <Card style={{ marginBottom: '24px' }} padding="0">

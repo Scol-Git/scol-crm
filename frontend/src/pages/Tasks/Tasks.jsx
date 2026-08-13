@@ -8,7 +8,7 @@ import {
   Calendar,
   User,
 } from 'lucide-react';
-import { Card, Table, Badge, Button, Modal, Input, Select, SearchInput } from '../../components';
+import { Card, Table, Badge, Button, Modal, Input, Select, SearchInput, Alert } from '../../components';
 import { taskService } from '../../services';
 import { colors } from '../../theme';
 
@@ -17,6 +17,9 @@ const Tasks = () => {
   const [tasks, setTasks] = useState([]);
   const [filteredTasks, setFilteredTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
@@ -49,8 +52,10 @@ const Tasks = () => {
       const data = await taskService.getAll();
       setTasks(data);
       setFilteredTasks(data);
-    } catch (error) {
-      console.error('Failed to load tasks:', error);
+      setError('');
+    } catch (err) {
+      console.error('Failed to load tasks:', err);
+      setError(err.message || 'Failed to load tasks.');
     } finally {
       setLoading(false);
     }
@@ -89,6 +94,7 @@ const Tasks = () => {
   };
 
   const handleStatusChange = async (taskId, newStatus) => {
+    setError('');
     try {
       await taskService.updateStatus(taskId, newStatus);
       setTasks((prev) =>
@@ -96,8 +102,9 @@ const Tasks = () => {
           task.id === taskId ? { ...task, status: newStatus } : task
         )
       );
-    } catch (error) {
-      console.error('Failed to update task status:', error);
+    } catch (err) {
+      console.error('Failed to update task status:', err);
+      setError(err.message || 'Failed to update the task status.');
     }
   };
 
@@ -109,6 +116,8 @@ const Tasks = () => {
   const handleAddTask = async () => {
     if (!formData.title.trim()) return;
 
+    setSaving(true);
+    setSaveError('');
     try {
       const newTask = await taskService.create({
         ...formData,
@@ -117,8 +126,11 @@ const Tasks = () => {
       setTasks((prev) => [...prev, newTask]);
       setShowAddModal(false);
       setFormData({ title: '', dueDate: '', priority: 'medium', leadId: '' });
-    } catch (error) {
-      console.error('Failed to create task:', error);
+    } catch (err) {
+      console.error('Failed to create task:', err);
+      setSaveError(err.message || 'Failed to create the task. Please try again.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -282,6 +294,8 @@ const Tasks = () => {
 
   return (
     <div>
+      <Alert variant="error" onDismiss={() => setError('')}>{error}</Alert>
+
       {/* Stats Cards */}
       <div style={{
         display: 'grid',
@@ -467,18 +481,21 @@ const Tasks = () => {
       {/* Add Task Modal */}
       <Modal
         isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
+        onClose={() => { setShowAddModal(false); setSaveError(''); }}
         title="Add New Task"
         size="medium"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setShowAddModal(false)}>
+            <Button variant="ghost" onClick={() => { setShowAddModal(false); setSaveError(''); }}>
               Cancel
             </Button>
-            <Button onClick={handleAddTask}>Add Task</Button>
+            <Button onClick={handleAddTask} disabled={saving}>
+              {saving ? 'Adding...' : 'Add Task'}
+            </Button>
           </>
         }
       >
+        <Alert variant="error" onDismiss={() => setSaveError('')}>{saveError}</Alert>
         <Input
           label="Task Title"
           name="title"

@@ -1,16 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Edit2, Eye } from 'lucide-react';
-import { Card, Table, Button, Badge, SearchInput, Modal, Input, Select } from '../../components';
-import { leadService } from '../../services';
+import { Card, Table, Button, Badge, SearchInput, Modal, Input, Select, Alert } from '../../components';
+import { leadService, buildLeadQuery } from '../../services';
 import { LEAD_STATUS, leadStatusVariant, REGISTER_SOURCE, GENDER_OPTIONS } from '../../services/mappers';
 import { colors } from '../../theme';
 
 const LeadList = () => {
   const navigate = useNavigate();
   const [leads, setLeads] = useState([]);
-  const [filteredLeads, setFilteredLeads] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [pageInfo, setPageInfo] = useState({ cursor: null, hasNext: false });
+  const [error, setError] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -41,7 +45,6 @@ const LeadList = () => {
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    loadLeads();
     loadDropdownData();
 
     const handleResize = () => {
@@ -51,19 +54,52 @@ const LeadList = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Search + filters are applied server-side. Debounced so typing doesn't fire
+  // a request per keystroke; any change resets back to the first page.
   useEffect(() => {
-    filterLeads();
-  }, [searchQuery, leads]);
+    const timer = setTimeout(() => loadLeads(), 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery, filters.status, filters.country, filters.englishTest, filters.dateFrom, filters.dateTo]);
+
+  const currentQuery = () => buildLeadQuery({
+    searchText: searchQuery,
+    status: filters.status,
+    countryId: filters.country,
+    englishTest: filters.englishTest,
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
+  });
 
   const loadLeads = async () => {
+    setLoading(true);
+    setError('');
     try {
-      const { leads: data } = await leadService.getAll();
+      const { leads: data, pagination } = await leadService.getAll(currentQuery());
       setLeads(data);
-      setFilteredLeads(data);
-    } catch (error) {
-      console.error('Failed to load leads:', error);
+      setPageInfo({ cursor: pagination?.cursor ?? null, hasNext: !!pagination?.hasNext });
+    } catch (err) {
+      console.error('Failed to load leads:', err);
+      setError(err.message || 'Failed to load leads.');
+      setLeads([]);
+      setPageInfo({ cursor: null, hasNext: false });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMore = async () => {
+    if (!pageInfo.hasNext || !pageInfo.cursor) return;
+    setLoadingMore(true);
+    setError('');
+    try {
+      const { leads: data, pagination } = await leadService.getAll({ ...currentQuery(), cursor: pageInfo.cursor });
+      setLeads((prev) => [...prev, ...data]);
+      setPageInfo({ cursor: pagination?.cursor ?? null, hasNext: !!pagination?.hasNext });
+    } catch (err) {
+      console.error('Failed to load more leads:', err);
+      setError(err.message || 'Failed to load more leads.');
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -72,56 +108,11 @@ const LeadList = () => {
       const { countries: countryList, consultants: consultantList } = await leadService.getDropdownData();
       setCountries(countryList);
       setConsultants(consultantList);
-    } catch (error) {
-      console.error('Failed to load lead dropdown data:', error);
+    } catch (err) {
+      console.error('Failed to load lead dropdown data:', err);
+      setError(err.message || 'Failed to load country/consultant options.');
     }
   };
-
-  const filterLeads = () => {
-    let filtered = leads;
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (lead) => {
-          if (!lead) return false;
-          return (
-            lead.fullName?.toLowerCase().includes(query) ||
-            lead.email?.toLowerCase().includes(query) ||
-            lead.phone?.includes(query)
-          );
-        }
-      );
-    }
-
-    if (filters.dateFrom) {
-      filtered = filtered.filter((lead) => new Date(lead.createdAt) >= new Date(filters.dateFrom));
-    }
-
-    if (filters.dateTo) {
-      // Add one day to include the whole 'dateTo' day
-      const toDate = new Date(filters.dateTo);
-      toDate.setDate(toDate.getDate() + 1);
-      filtered = filtered.filter((lead) => lead && new Date(lead.createdAt) < toDate);
-    }
-
-    if (filters.status) {
-      filtered = filtered.filter(lead => lead && lead.status === filters.status);
-    }
-    if (filters.country) {
-      filtered = filtered.filter(lead => lead && lead.targetCountryId === filters.country);
-    }
-    if (filters.englishTest) {
-      const isPassed = filters.englishTest === 'true';
-      filtered = filtered.filter(lead => lead && !!lead.hasPassedEnglishTest === isPassed);
-    }
-
-    setFilteredLeads(filtered);
-  };
-
-  useEffect(() => {
-    filterLeads();
-  }, [searchQuery, leads, filters]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -146,6 +137,8 @@ const LeadList = () => {
   const handleAddLead = async () => {
     if (!validateForm()) return;
 
+    setSaving(true);
+    setSaveError('');
     try {
       await leadService.create({
         ...formData,
@@ -154,14 +147,19 @@ const LeadList = () => {
       setShowAddModal(false);
       resetForm();
       loadLeads();
-    } catch (error) {
-      console.error('Failed to create lead:', error);
+    } catch (err) {
+      console.error('Failed to create lead:', err);
+      setSaveError(err.message || 'Failed to create lead. Please try again.');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleEditLead = async () => {
     if (!validateForm()) return;
 
+    setSaving(true);
+    setSaveError('');
     try {
       await leadService.update(selectedLead.id, {
         ...formData,
@@ -170,8 +168,11 @@ const LeadList = () => {
       setShowEditModal(false);
       resetForm();
       loadLeads();
-    } catch (error) {
-      console.error('Failed to update lead:', error);
+    } catch (err) {
+      console.error('Failed to update lead:', err);
+      setSaveError(err.message || 'Failed to update lead. Please try again.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -195,6 +196,7 @@ const LeadList = () => {
   };
 
   const resetForm = () => {
+    setSaveError('');
     setFormData({
       fullName: '',
       phone: '',
@@ -471,18 +473,40 @@ const LeadList = () => {
         </div>
       </div>
 
+      {/* Load / filter errors */}
+      <Alert variant="error" onDismiss={() => setError('')}>{error}</Alert>
+
       {/* Leads Table */}
       <Card padding="0">
         <div style={{ overflowX: 'auto' }}>
           <Table
             columns={columns}
-            data={filteredLeads}
+            data={leads}
             loading={loading}
             onRowClick={(lead) => navigate(`/leads/${lead.id}`, { state: { lead } })}
             emptyMessage="No leads found"
           />
         </div>
       </Card>
+
+      {/* Cursor pagination - the list endpoint caps each page at 50 rows */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: '12px',
+        marginTop: '16px',
+        flexDirection: isMobile ? 'column' : 'row',
+      }}>
+        <span style={{ fontSize: '13px', color: colors.textSecondary }}>
+          Showing {leads.length} lead{leads.length === 1 ? '' : 's'}{pageInfo.hasNext ? ' so far' : ''}
+        </span>
+        {pageInfo.hasNext && (
+          <Button variant="ghost" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? 'Loading...' : 'Load more'}
+          </Button>
+        )}
+      </div>
 
       {/* Add Lead Modal */}
       <Modal
@@ -501,10 +525,13 @@ const LeadList = () => {
             }}>
               Cancel
             </Button>
-            <Button onClick={handleAddLead}>Save Lead</Button>
+            <Button onClick={handleAddLead} disabled={saving}>
+              {saving ? 'Saving...' : 'Save Lead'}
+            </Button>
           </>
         }
       >
+        <Alert variant="error" onDismiss={() => setSaveError('')}>{saveError}</Alert>
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
           <div style={{ gridColumn: '1 / -1' }}>
             <Input
@@ -613,10 +640,13 @@ const LeadList = () => {
             }}>
               Cancel
             </Button>
-            <Button onClick={handleEditLead}>Update Lead</Button>
+            <Button onClick={handleEditLead} disabled={saving}>
+              {saving ? 'Updating...' : 'Update Lead'}
+            </Button>
           </>
         }
       >
+        <Alert variant="error" onDismiss={() => setSaveError('')}>{saveError}</Alert>
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
           <div style={{ gridColumn: '1 / -1' }}>
             <Input

@@ -63,13 +63,49 @@ async function refreshAccessToken() {
   return refreshPromise;
 }
 
+// Drop the session and send the user to /login. Guarded so that a burst of
+// parallel 401s (a page firing several requests at once) only redirects once.
+let redirecting = false;
+function endSession() {
+  tokenStorage.clear();
+  if (redirecting) return;
+  redirecting = true;
+  if (window.location.pathname !== '/login') window.location.assign('/login');
+}
+
 class ApiError extends Error {
   constructor(message, statusCode, code) {
     super(message);
     this.name = 'ApiError';
     this.statusCode = statusCode;
     this.code = code;
+    // Set for the "authenticated, but this user isn't a CRM consultant" case.
+    this.noCrmAccess = false;
   }
+}
+
+// The backend authenticates leads and staff through the same /auth/login, and
+// the user object carries no role, so the only signal that an account lacks CRM
+// access is this error coming back from a /crm/* call. It arrives as a 404,
+// which reads as "endpoint missing" unless we translate it.
+const CRM_ACCESS_PATTERN = /consultant\s+user\s+not\s+found|consultant\s+not\s+found/i;
+
+function buildError(path, res, json) {
+  const raw = json?.message || `Request failed with status ${res.status}`;
+  const isCrmPath = path.startsWith('/crm/');
+
+  if (isCrmPath && CRM_ACCESS_PATTERN.test(raw)) {
+    const err = new ApiError(
+      'This account does not have CRM access. It is signed in successfully, but has no consultant record on the backend, so CRM data cannot be loaded. Ask the backend team to attach a consultant record to this user.',
+      res.status,
+      json?.error?.code,
+    );
+    err.noCrmAccess = true;
+    err.rawMessage = raw;
+    return err;
+  }
+
+  return new ApiError(raw, json?.statusCode ?? res.status, json?.error?.code);
 }
 
 async function request(path, { method = 'GET', body, auth = true, token, headers = {}, _retried = false } = {}) {
@@ -87,39 +123,54 @@ async function request(path, { method = 'GET', body, auth = true, token, headers
 
   const json = await res.json().catch(() => null);
 
-  if (res.status === 401 && auth && !token && !_retried && tokenStorage.getRefreshToken()) {
-    try {
-      await refreshAccessToken();
-      return request(path, { method, body, auth, token, headers, _retried: true });
-    } catch {
-      tokenStorage.clear();
-      window.location.assign('/login');
-      throw new ApiError('Session expired. Please log in again.', 401);
+  // Any 401 on an authenticated call means the session is gone. Try a silent
+  // refresh when we have a refresh token; otherwise bounce to /login. Without
+  // the else-branch a missing refresh token left the 401 to propagate into the
+  // pages' catch blocks, which rendered every screen permanently blank.
+  if (res.status === 401 && auth && !token && !_retried) {
+    if (tokenStorage.getRefreshToken()) {
+      try {
+        await refreshAccessToken();
+        return request(path, { method, body, auth, token, headers, _retried: true });
+      } catch {
+        endSession();
+        throw new ApiError('Session expired. Please log in again.', 401);
+      }
     }
+    endSession();
+    throw new ApiError('Session expired. Please log in again.', 401);
   }
 
   if (!res.ok || json?.status === 'error') {
-    const message = json?.message || `Request failed with status ${res.status}`;
-    throw new ApiError(message, json?.statusCode ?? res.status, json?.error?.code);
+    throw buildError(path, res, json);
   }
 
   return json?.data;
 }
 
-// The backend doesn't document response bodies for a few list endpoints.
-// This defensively pulls an array out of common wrapper shapes so the UI
-// doesn't break if the actual key differs from what we assumed.
+// The backend doesn't document response bodies for the /crm/* list endpoints.
+// Verified convention (from /home and /search, which are documented): the
+// collection is keyed by entity name alongside a cursor pagination object:
+//   { <entity>: [...], pagination: { cursor, limit, hasNext } }
+// We still probe common alternatives so a differing key doesn't blank the UI.
 export function extractList(data, extraKeys = []) {
-  if (Array.isArray(data)) return { items: data, pagination: null };
-  if (!data || typeof data !== 'object') return { items: [], pagination: null };
+  const emptyPage = { cursor: null, hasNext: false };
+
+  if (Array.isArray(data)) return { items: data, pagination: emptyPage };
+  if (!data || typeof data !== 'object') return { items: [], pagination: emptyPage };
+
+  const pagination = {
+    cursor: data.pagination?.cursor ?? data.cursor ?? null,
+    hasNext: data.pagination?.hasNext ?? data.hasNext ?? false,
+    limit: data.pagination?.limit,
+    totalCount: data.pagination?.totalCount ?? data.totalCount ?? null,
+  };
 
   const candidates = [...extraKeys, 'items', 'results', 'data'];
   for (const key of candidates) {
-    if (Array.isArray(data[key])) {
-      return { items: data[key], pagination: data.pagination ?? null };
-    }
+    if (Array.isArray(data[key])) return { items: data[key], pagination };
   }
-  return { items: [], pagination: data.pagination ?? null };
+  return { items: [], pagination };
 }
 
 export const api = {

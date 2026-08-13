@@ -8,7 +8,7 @@ import {
   ArrowRight,
   Filter,
 } from 'lucide-react';
-import { Card, MetricCard, Badge, Table, Input } from '../../components';
+import { Card, MetricCard, Badge, Table, Input, Alert } from '../../components';
 import { dashboardService } from '../../services';
 import { colors } from '../../theme';
 
@@ -16,6 +16,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [dateFilters, setDateFilters] = useState({ dateFrom: '', dateTo: '' });
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -39,8 +40,10 @@ const Dashboard = () => {
       // Pass the dateFilters down to the service if supported.
       const data = await dashboardService.getStats(dateFilters);
       setStats(data);
-    } catch (error) {
-      console.error('Failed to load stats:', error);
+      setError('');
+    } catch (err) {
+      console.error('Failed to load stats:', err);
+      setError(err.message || 'Failed to load dashboard statistics.');
     } finally {
       setLoading(false);
     }
@@ -114,6 +117,8 @@ const Dashboard = () => {
 
   return (
     <div>
+      <Alert variant="error" onDismiss={() => setError('')}>{error}</Alert>
+
       {/* Date Filters Header */}
       <div style={{
         display: 'flex',

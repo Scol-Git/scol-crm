@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Eye, MapPin, Globe, BookOpen, Search, X, ChevronDown, ChevronUp, Award } from 'lucide-react';
-import { Card, Button, Input, Select, Modal } from '../../components';
+import { Card, Button, Input, Select, Modal, Alert } from '../../components';
 import { universityService, lookupService, detailedCourseService } from '../../services';
 import { colors } from '../../theme';
 
@@ -11,6 +11,7 @@ const UniversityList = () => {
   const [allCourses, setAllCourses] = useState([]);
   const [filteredUniversities, setFilteredUniversities] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,8 +72,10 @@ const UniversityList = () => {
       setUniversities(uniData);
       setAllCourses(courseData);
       setCountries(countryData);
-    } catch (error) {
-      console.error('Failed to load data:', error);
+      setError('');
+    } catch (err) {
+      console.error('Failed to load data:', err);
+      setError(err.message || 'Failed to load universities and courses.');
     } finally {
       setLoading(false);
     }
@@ -227,6 +230,8 @@ const UniversityList = () => {
 
   return (
     <div>
+      <Alert variant="error" onDismiss={() => setError('')}>{error}</Alert>
+
       {/* Header Actions */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexDirection: isMobile ? 'column' : 'row', gap: '16px' }}>
         <h2 style={{ margin: 0, color: colors.textPrimary, fontSize: '24px' }}>Universities & Courses</h2>

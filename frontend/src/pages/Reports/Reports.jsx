@@ -8,7 +8,7 @@ import {
   Download,
   Calendar,
 } from 'lucide-react';
-import { Card, Button, Input, MetricCard } from '../../components';
+import { Card, Button, Input, MetricCard, Alert } from '../../components';
 import { reportService } from '../../services';
 import { colors } from '../../theme';
 
@@ -17,6 +17,7 @@ const Reports = () => {
   const [countryStats, setCountryStats] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [dateFilters, setDateFilters] = useState({ dateFrom: '', dateTo: '' });
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -41,8 +42,10 @@ const Reports = () => {
       setMonthlyStats(monthly);
       setCountryStats(countries);
       setSummary(summaryData);
-    } catch (error) {
-      console.error('Failed to load reports:', error);
+      setError('');
+    } catch (err) {
+      console.error('Failed to load reports:', err);
+      setError(err.message || 'Failed to load reports.');
     } finally {
       setLoading(false);
     }
@@ -69,6 +72,8 @@ const Reports = () => {
 
   return (
     <div>
+      <Alert variant="error" onDismiss={() => setError('')}>{error}</Alert>
+
       {/* Header */}
       <div style={{
         display: 'flex',

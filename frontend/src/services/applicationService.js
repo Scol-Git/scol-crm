@@ -6,6 +6,14 @@ import { api, extractList } from './apiClient';
 
 const delay = (ms = 300) => new Promise(resolve => setTimeout(resolve, ms));
 
+// ApplicationIntakeDto = { intakeMonth: 1-12, intakeYear: number }
+const toIntake = (intake) => {
+  if (intake && typeof intake === 'object' && 'intakeMonth' in intake) return intake;
+  const d = intake instanceof Date ? intake : new Date(intake);
+  if (Number.isNaN(d.getTime())) return intake;
+  return { intakeMonth: d.getMonth() + 1, intakeYear: d.getFullYear() };
+};
+
 const normalizeApplication = (raw) => ({
   id: raw.id ?? raw.applicationId,
   leadId: raw.leadId ?? raw.lead?.id ?? null,
@@ -25,20 +33,52 @@ const normalizeApplication = (raw) => ({
   _raw: raw,
 });
 
+// Backend caps pagination.limit at 50 (CursorPaginationDto).
+const PAGE_LIMIT = 50;
+
+// Maps the UI's flat filter state onto CrmApplicationFiltersDto.
+// NOTE: unlike the Leads DTO, the status/stage keys are PascalCase and the date
+// range is nested under `ranges.dateRange`. Sending camelCase or a flat range
+// here is silently ignored by the backend rather than rejected.
+export const buildApplicationQuery = ({ searchText, status, stage, consultantId, dateFrom, dateTo } = {}) => {
+  const filters = {};
+  if (status) filters.ApplicationStatuses = [status];
+  if (stage) filters.ApplicationStages = [stage];
+  if (consultantId) filters.consultantIds = [consultantId];
+
+  const dateRange = {};
+  if (dateFrom) dateRange.startDate = dateFrom;
+  if (dateTo) dateRange.endDate = dateTo;
+
+  return {
+    ...(searchText?.trim() ? { searchText: searchText.trim() } : {}),
+    ...(Object.keys(filters).length ? { filters } : {}),
+    ...(Object.keys(dateRange).length ? { ranges: { dateRange } } : {}),
+  };
+};
+
 export const applicationService = {
-  async getAll({ searchText, filters, ranges, pagination } = {}) {
+  async getAll({ searchText, filters, ranges, cursor, limit } = {}) {
     const data = await api.post('/crm/applications/list', {
       ...(searchText ? { searchText } : {}),
       ...(filters ? { filters } : {}),
       ...(ranges ? { ranges } : {}),
-      pagination: pagination ?? { limit: 50 },
+      pagination: { limit: limit ?? PAGE_LIMIT, ...(cursor ? { cursor } : {}) },
     });
-    const { items, pagination: nextPagination } = extractList(data, ['applications']);
-    return { applications: items.map(normalizeApplication), pagination: nextPagination };
+    const { items, pagination } = extractList(data, ['applications']);
+    return { applications: items.map(normalizeApplication), pagination };
   },
 
+  // Consultants (and whatever else the backend exposes) for the list filters.
+  // Response is undocumented, so probe the likely key names.
   async getDropdownData() {
-    return api.get('/crm/applications/dropdown-data');
+    const data = await api.get('/crm/applications/dropdown-data');
+    const raw = data ?? {};
+    return {
+      consultants: raw.consultants ?? raw.counselors ?? [],
+      universities: raw.universities ?? [],
+      raw,
+    };
   },
 
   async getByLead(leadId) {
@@ -52,9 +92,31 @@ export const applicationService = {
     return normalizeApplication(data);
   },
 
+  // CreateApplicationRequestDto requires intake as { intakeMonth, intakeYear } -
+  // accept either that or a Date/ISO string and normalize before sending.
   async create(leadId, { universityId, courseId, intake }) {
-    const data = await api.post(`/crm/leads/${leadId}/applications`, { universityId, courseId, intake });
-    return normalizeApplication(data ?? { leadId, universityId, courseId, intake });
+    const payload = {
+      universityId,
+      courseId,
+      intake: toIntake(intake),
+    };
+    const data = await api.post(`/crm/leads/${leadId}/applications`, payload);
+    return normalizeApplication(data ?? { leadId, ...payload });
+  },
+
+  // Resolves the owning leadId for an application when it wasn't passed via
+  // router state (direct URL / refresh). Walks the cursor rather than only
+  // checking the first page.
+  async findLeadId(applicationId, { maxPages = 20 } = {}) {
+    let cursor = null;
+    for (let page = 0; page < maxPages; page += 1) {
+      const { applications, pagination } = await this.getAll({ cursor });
+      const match = applications.find((a) => a.id === applicationId);
+      if (match?.leadId) return match.leadId;
+      if (!pagination?.hasNext || !pagination?.cursor) break;
+      cursor = pagination.cursor;
+    }
+    return null;
   },
 
   async getStageProgress(leadId, applicationId) {
@@ -63,6 +125,70 @@ export const applicationService = {
 
   async getDocumentProgress(leadId, applicationId) {
     return api.get(`/crm/leads/${leadId}/applications/${applicationId}/document-progress`);
+  },
+
+  // --- Documents -----------------------------------------------------------
+  // Two distinct things live here and must not be confused:
+  //   * a *document* is an uploaded file  -> statuses PENDING/IN_PROGRESS/REJECTED/VERIFIED
+  //   * a *requirement* is the slot it fills (documentType) -> PENDING/IN_PROGRESS/VERIFIED
+  // They have separate endpoints and separate enums (a requirement can't be REJECTED).
+
+  async changeDocumentStatus(leadId, applicationId, documentId, { toStatus, remarks }) {
+    return api.post(
+      `/crm/leads/${leadId}/applications/${applicationId}/documents/${documentId}/status-changes`,
+      { toStatus, ...(remarks ? { remarks } : {}) },
+    );
+  },
+
+  async changeRequirementStatus(leadId, applicationId, documentTypeId, { toStatus, remarks }) {
+    return api.post(
+      `/crm/leads/${leadId}/applications/${applicationId}/document-types/${documentTypeId}/status-changes`,
+      { toStatus, ...(remarks ? { remarks } : {}) },
+    );
+  },
+
+  // Returns whatever the backend hands back (typically a short-lived signed URL).
+  async getDocumentDownload(leadId, applicationId, documentId) {
+    return api.get(`/crm/leads/${leadId}/applications/${applicationId}/documents/${documentId}/download`);
+  },
+
+  async requestUploadUrl(leadId, applicationId, documentTypeId, { fileName, mimeType, fileSizeBytes }) {
+    return api.post(
+      `/crm/leads/${leadId}/applications/${applicationId}/document-types/${documentTypeId}/upload-url`,
+      { fileName, mimeType, fileSizeBytes },
+    );
+  },
+
+  async confirmUpload(leadId, applicationId, documentTypeId, { documentId, documentVersionId }) {
+    return api.post(
+      `/crm/leads/${leadId}/applications/${applicationId}/document-types/${documentTypeId}/confirm-upload`,
+      { documentId, documentVersionId },
+    );
+  },
+
+  // Three-step presigned upload: ask for a URL, PUT the bytes straight to
+  // storage (no auth header - the signature carries it), then confirm.
+  async uploadDocument(leadId, applicationId, documentTypeId, file) {
+    const ticket = await this.requestUploadUrl(leadId, applicationId, documentTypeId, {
+      fileName: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      fileSizeBytes: file.size,
+    });
+
+    const uploadUrl = ticket?.uploadUrl ?? ticket?.url ?? ticket?.signedUrl;
+    if (!uploadUrl) throw new Error('The server did not return an upload URL.');
+
+    const put = await fetch(uploadUrl, {
+      method: ticket?.method ?? 'PUT',
+      headers: { 'Content-Type': file.type || 'application/octet-stream', ...(ticket?.headers ?? {}) },
+      body: file,
+    });
+    if (!put.ok) throw new Error(`Upload failed (${put.status}). Please try again.`);
+
+    return this.confirmUpload(leadId, applicationId, documentTypeId, {
+      documentId: ticket?.documentId,
+      documentVersionId: ticket?.documentVersionId,
+    });
   },
 
   async getActivities(leadId, applicationId) {

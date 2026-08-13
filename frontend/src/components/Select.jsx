@@ -20,6 +20,8 @@ const Select = ({
     ...customContainerStyle,
   };
 
+  const hasBlankOption = options.some((option) => option.value === '' || option.value == null);
+
   const labelStyle = {
     display: 'block',
     marginBottom: '6px',
@@ -71,9 +73,14 @@ const Select = ({
         style={selectStyle}
         {...props}
       >
-        <option value="">{placeholder}</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
+        {/* Callers often supply their own blank entry (e.g. "All Statuses").
+            Only add the placeholder when they haven't, otherwise the list
+            renders two empty-valued options. */}
+        {!hasBlankOption && <option value="">{placeholder}</option>}
+        {options.map((option, index) => (
+          // option.value is '' for those blank entries; an empty-string key
+          // reads as "no key" to React, so fall back to the index.
+          <option key={option.value === '' || option.value == null ? `blank-${index}` : option.value} value={option.value}>
             {option.label}
           </option>
         ))}
