@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Globe, MapPin, BookOpen, Calendar, DollarSign, Clock, Edit2 } from 'lucide-react';
 import { Card, Button, Badge, Table, Input, Select, Modal, Alert } from '../../components';
 import { universityService, lookupService } from '../../services';
@@ -8,7 +8,12 @@ import { colors } from '../../theme';
 const UniversityDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [university, setUniversity] = useState(null);
+  // True when we're rendering from the data a course handed us rather than from
+  // the local university records - the backend exposes no university endpoint,
+  // so real university ids won't match anything stored locally.
+  const [fromCourse, setFromCourse] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -41,10 +46,30 @@ const UniversityDetails = () => {
 
   const loadUniversity = async () => {
     try {
-      const [data, countryData] = await Promise.all([
+      const [found, countryData] = await Promise.all([
         universityService.getById(id),
         lookupService.getCountries()
       ]);
+
+      // Fall back to whatever the course card passed through router state.
+      const passed = location.state?.university;
+      const data = found ?? (passed ? {
+        id: passed.id ?? id,
+        uniName: passed.name ?? 'Unknown university',
+        logoUrl: passed.logoUrl ?? null,
+        coverImageUrl: passed.imgUrl ?? null,
+        address: [passed.city, passed.state, passed.country].filter(Boolean).join(', '),
+        courses: [],
+        intakes: [],
+      } : null);
+
+      if (!data) {
+        setUniversity(null);
+        setError('This university is not available. The backend has no university endpoint yet, so only universities reached from a course can be shown.');
+        return;
+      }
+
+      setFromCourse(!found);
       setUniversity(data);
       setCountries(countryData);
       setFormData({
@@ -111,10 +136,11 @@ const UniversityDetails = () => {
 
   if (!university) {
     return (
-      <div style={{ textAlign: 'center', padding: '40px' }}>
+      <div style={{ maxWidth: '560px', margin: '40px auto', textAlign: 'center' }}>
         <h2 style={{ color: colors.textPrimary }}>University not found</h2>
-        <Button onClick={() => navigate('/universities')} style={{ marginTop: '16px' }}>
-          Back to Universities
+        {error && <Alert variant="error" style={{ textAlign: 'left', marginTop: '16px' }}>{error}</Alert>}
+        <Button onClick={() => navigate('/courses')} style={{ marginTop: '16px' }}>
+          Back to Courses
         </Button>
       </div>
     );
@@ -183,7 +209,7 @@ const UniversityDetails = () => {
     <div>
       {/* Back Button */}
       <button
-        onClick={() => navigate('/universities')}
+        onClick={() => navigate('/courses')}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -197,10 +223,17 @@ const UniversityDetails = () => {
         }}
       >
         <ArrowLeft size={18} />
-        Back to Universities
+        Back to Courses
       </button>
 
       <Alert variant="error" onDismiss={() => setError('')}>{error}</Alert>
+
+      {fromCourse && (
+        <Alert variant="info">
+          Showing only the details the course record carries (name, logo, cover, location).
+          Full university data and its course list need a backend university endpoint.
+        </Alert>
+      )}
 
       {/* University Header */}
       <Card style={{ marginBottom: '24px' }} padding="0">

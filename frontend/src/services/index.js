@@ -214,30 +214,9 @@ export const universityService = {
   },
 };
 
-// Course Services (mock - no backend endpoints yet)
-export const courseService = {
-  async getAll() {
-    await delay();
-    return courses.map(course => ({
-      ...course,
-      university: universities.find(u => u.id === course.uniId),
-      programme: programmes.find(p => p.id === course.sysProgrammeId),
-      degree: academicDegrees.find(d => d.id === course.sysDegreeId),
-    }));
-  },
-
-  async getByUniversity(uniId) {
-    await delay();
-    return courses
-      .filter(c => c.uniId === uniId)
-      .map(course => ({
-        ...course,
-        programme: programmes.find(p => p.id === course.sysProgrammeId),
-        degree: academicDegrees.find(d => d.id === course.sysDegreeId),
-        intakes: courseIntakes.filter(ci => ci.uniCourseId === course.id),
-      }));
-  },
-};
+// NOTE: the old mock `courseService` was removed here. Courses are now backed by
+// the real search endpoints - import { courseService } from './courseService'.
+// Keeping a same-named mock in this barrel file silently shadowed the real one.
 
 export const detailedCourseService = {
   async getAll() {
@@ -377,7 +356,6 @@ export const lookupService = {
 export default {
   leadService,
   universityService,
-  courseService,
   dashboardService,
   lookupService,
 };

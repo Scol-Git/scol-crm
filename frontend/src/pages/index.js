@@ -1,6 +1,9 @@
 export { default as Dashboard } from './Dashboard';
 export { LeadList, LeadDetails } from './Leads';
-export { UniversityList, UniversityDetails } from './Universities';
+export { CourseList, CourseDetails } from './Courses';
+// University list is superseded by Courses; the details page is still reachable
+// by clicking a university name on a course.
+export { UniversityDetails } from './Universities';
 export { default as Settings } from './Settings';
 export { Applications, ApplicationDetails } from './Applications';
 export { default as Tasks } from './Tasks';

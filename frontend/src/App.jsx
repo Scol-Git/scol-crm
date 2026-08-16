@@ -7,7 +7,8 @@ import {
   Dashboard,
   LeadList,
   LeadDetails,
-  UniversityList,
+  CourseList,
+  CourseDetails,
   UniversityDetails,
   Settings,
   Applications,
@@ -41,8 +42,12 @@ function App() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="leads" element={<LeadList />} />
             <Route path="leads/:id" element={<LeadDetails />} />
-            <Route path="universities" element={<UniversityList />} />
+            <Route path="courses" element={<CourseList />} />
+            <Route path="courses/:id" element={<CourseDetails />} />
+            {/* Reached by clicking a university name on a course */}
             <Route path="universities/:id" element={<UniversityDetails />} />
+            {/* Old entry point - Universities is now Courses */}
+            <Route path="universities" element={<Navigate to="/courses" replace />} />
             <Route path="applications" element={<Applications />} />
             <Route path="applications/:id" element={<ApplicationDetails />} />
             <Route path="tasks" element={<Tasks />} />

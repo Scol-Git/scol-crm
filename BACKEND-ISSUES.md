@@ -170,16 +170,23 @@ This is optional-auth behaviour (public catalogue, personalised when signed in) 
 
 ---
 
-## ⚪ 10. `/categories/cities` returns an empty list
+## ⚪ 10. `/categories/cities` has a required parameter that Swagger doesn't declare
+
+The endpoint works, but only with a `countryId` query param. Swagger declares **no parameters at all**, so the obvious call looks like an empty/broken endpoint:
 
 ```
 GET /categories/cities
-→ 200  {"status":"success","data":{"cities":[]}}
+→ 200  {"status":"success","data":{"cities":[]}}          ← reads as "no cities exist"
+
+GET /categories/cities?countryId=22ae0ae2-50b6-43d9-9b4d-db071fb4c595
+→ 200  {"cities":[{"id":"def90df7-…","name":"Calgary"}, …]}   ← works
 ```
 
-Routed and healthy, but empty — either unseeded in QA or it needs an undocumented parameter (a `countryId`/`stateId` filter?). It's the only city lookup available, so the CRM's city fields have no real data source.
+Returning `200 []` for a missing required parameter is the problem — a `400` naming the missing param would have made this self-evident. Please either document `countryId` as a required parameter, or return 400 when it's absent. (Note `countryIds`, plural, silently returns empty too.)
 
-**Note:** countries and programmes *are* available publicly via `GET /search/advanced/filters` (8 countries, 120 programmes, with real UUIDs). States, degrees, English tests, and intakes have no endpoint at all.
+**Also: the response contains duplicate city names with different UUIDs** — Canada returns "Calgary" four times, each with a distinct id. The CRM de-dupes by name client-side to keep the dropdown usable, but that means we're guessing which id is canonical. This looks like a data-seeding problem worth checking.
+
+**Lookup coverage overall:** countries and programmes are available publicly via `GET /search/advanced/filters` (8 countries, 120 programmes, real UUIDs). Cities work as above. **States, degrees, English tests, and intakes have no endpoint at all.**
 
 ---
 

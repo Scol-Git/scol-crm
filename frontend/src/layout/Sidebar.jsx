@@ -77,7 +77,7 @@ const Sidebar = ({ isOpen, isMobile, onClose }) => {
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/leads', label: 'Leads', icon: Users },
     { path: '/applications', label: 'Applications', icon: FileText },
-    { path: '/universities', label: 'Universities', icon: GraduationCap },
+    { path: '/courses', label: 'Courses', icon: GraduationCap },
     { path: '/tasks', label: 'Tasks', icon: CheckSquare },
     { path: '/reports', label: 'Reports', icon: BarChart3 },
     { path: '/settings', label: 'Settings', icon: Settings },
