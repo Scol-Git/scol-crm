@@ -448,10 +448,13 @@ const Dashboard = () => {
         }
         padding="0"
       >
+        {/* No row click: GET /crm/dashboard returns no lead ids, so the row
+            key is synthesised from phone+index and cannot address a lead.
+            Navigating with it produced "Validation failed (uuid is expected)".
+            Use "View All" until the endpoint returns leadId. */}
         <Table
           columns={recentLeadsColumns}
           data={stats?.recentLeads || []}
-          onRowClick={(lead) => navigate(`/leads/${lead.id}`)}
           emptyMessage="No recent leads"
         />
       </Card>

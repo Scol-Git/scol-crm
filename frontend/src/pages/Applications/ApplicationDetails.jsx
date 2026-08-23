@@ -11,7 +11,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Card, Button, Badge, Modal, Select, Alert } from '../../components';
-import { applicationService } from '../../services';
+import { applicationService, leadService } from '../../services';
 import {
   APPLICATION_STATUS,
   applicationStatusVariant,
@@ -21,65 +21,85 @@ import {
 } from '../../services/mappers';
 import { colors } from '../../theme';
 
-const normalizeActivity = (raw) => ({
-  id: raw.id ?? `${raw.date ?? raw.createdAt}-${raw.title ?? raw.action}`,
-  title: raw.title ?? raw.action ?? raw.type ?? 'Activity',
-  description: raw.description ?? raw.message ?? raw.remarks ?? '',
-  date: raw.date ?? raw.createdAt ?? raw.timestamp ?? null,
+// CrmApplicationActivityItemDto (verified live): the timestamp is `occurredAt`
+// and the person is `actor.displayName`.
+const normalizeActivity = (raw = {}) => ({
+  id: raw.activityId ?? `${raw.occurredAt}-${raw.title}`,
+  type: raw.activityType ?? null,
+  title: raw.title ?? raw.activityType ?? 'Activity',
+  description: raw.description ?? raw.remarks ?? '',
+  actor: raw.actor?.displayName ?? null,
+  date: raw.occurredAt ?? null,
 });
 
-// A row in the Documents panel is a *requirement* (a document type the
-// application needs) which may or may not have an uploaded *document* against
-// it. The two have separate ids, separate status enums and separate endpoints,
-// so keep them apart - collapsing them into one `id` made it impossible to
-// tell which endpoint to call.
-const normalizeDocumentRequirement = (raw) => {
-  const documentTypeId = raw.documentTypeId ?? raw.documentType?.id ?? raw.typeId ?? raw.id ?? null;
+// document-progress returns { totalRequired, uploadedCount, progressBarItems:
+// [{ documentType: { documentTypeId, documentTypeCode, documentTypeName },
+//    order, overallStatus }] }  -- verified live.
+// A row is a *requirement* (the slot). Once a file exists it also has a
+// *document* id. The two have separate endpoints and separate status enums, so
+// both ids are kept.
+const normalizeDocumentRequirement = (raw = {}) => {
+  const dt = raw.documentType ?? {};
+  const documentTypeId = dt.documentTypeId ?? raw.documentTypeId ?? raw.id ?? null;
   const document = raw.document ?? raw.latestDocument ?? raw.currentDocument ?? null;
   const documentId = raw.documentId ?? document?.id ?? null;
 
   return {
     documentTypeId,
     documentId,
-    key: documentTypeId ?? documentId ?? raw.id,
-    label: raw.name ?? raw.label ?? raw.documentTypeName ?? raw.documentType?.name ?? 'Document',
-    required: raw.required ?? raw.isRequired ?? true,
-    // Requirement-level status (PENDING | IN_PROGRESS | VERIFIED)
-    status: raw.status ?? raw.requirementStatus ?? 'PENDING',
-    // Document-level status (adds REJECTED); only meaningful once uploaded
+    key: documentTypeId ?? documentId ?? raw.order,
+    label: dt.documentTypeName ?? raw.name ?? raw.label ?? 'Document',
+    code: dt.documentTypeCode ?? null,
+    order: raw.order ?? 0,
+    required: raw.isRequired ?? raw.required ?? true,
+    // Requirement-level status (server calls it overallStatus).
+    status: raw.overallStatus ?? raw.status ?? raw.requirementStatus ?? 'PENDING',
+    // Document-level status (adds REJECTED); only once a file exists.
     documentStatus: raw.documentStatus ?? document?.status ?? null,
     fileName: raw.fileName ?? document?.fileName ?? document?.name ?? null,
     uploadedAt: raw.uploadedAt ?? document?.uploadedAt ?? document?.createdAt ?? null,
   };
 };
 
+// The list/create payloads key the note by `noteId`, not `id`. Reading `id`
+// left every note with an undefined id, which made `editingNote?.id === note.id`
+// true for all of them (undefined === undefined) - so every note rendered
+// permanently in edit mode and Edit/Resolve/Delete were unreachable.
+// The backend rejects these status changes without remarks (verified live):
+//   ON_HOLD                        -> "Remarks are required for this application status"
+//   COMPLETED/REJECTED/CANCELLED   -> "Remarks are required when moving to a
+//                                      terminal application status"
+// A stage change needs remarks whenever it moves backwards.
+const STATUSES_REQUIRING_REMARKS = ['ON_HOLD', 'COMPLETED', 'REJECTED', 'CANCELLED'];
+
 const normalizeNote = (raw) => ({
-  id: raw.id,
+  id: raw.noteId ?? raw.id ?? null,
   description: raw.description,
   isResolved: !!raw.isResolved,
   createdAt: raw.createdAt ?? null,
 });
 
-// Turns the /stage-progress response into the stepper's steps. The endpoint is
-// undocumented, so accept the common shapes; falling back to the static enum
-// list (which is what this page used to always render) only when it gives us
-// nothing usable.
+// stage-progress returns { totalStages, completedStages, currentStage,
+// progressBarItems: [{ stageCode, stageName, order, state }] } where state is
+// COMPLETED | CURRENT | UPCOMING -- verified live.
 const normalizeStageProgress = (raw) => {
-  const list = Array.isArray(raw) ? raw : raw?.stages ?? raw?.items ?? raw?.progress ?? [];
+  const list = Array.isArray(raw) ? raw : raw?.progressBarItems ?? raw?.stages ?? raw?.items ?? [];
   if (!Array.isArray(list) || list.length === 0) return [];
   return list
-    .map((s) => {
-      const value = s.stage ?? s.value ?? s.code ?? s.name;
+    .map((s2) => {
+      const value = s2.stageCode ?? s2.stage ?? s2.value ?? s2.code;
       if (!value) return null;
+      const state = String(s2.state ?? '').toUpperCase();
       return {
         value,
-        label: APPLICATION_STAGE.label(value),
-        completed: s.completed ?? s.isCompleted ?? s.done ?? false,
-        current: s.current ?? s.isCurrent ?? false,
-        completedAt: s.completedAt ?? s.updatedAt ?? s.date ?? null,
+        label: s2.stageName ?? APPLICATION_STAGE.label(value),
+        order: s2.order ?? 0,
+        completed: state ? state === 'COMPLETED' : !!(s2.completed ?? s2.isCompleted),
+        current: state ? state === 'CURRENT' : !!(s2.current ?? s2.isCurrent),
       };
     })
-    .filter(Boolean);
+    .filter(Boolean)
+    .sort((x, y) => x.order - y.order);
 };
 
 const ApplicationDetails = () => {
@@ -137,16 +157,32 @@ const ApplicationDetails = () => {
       }
       setLeadId(resolvedLeadId);
 
-      const [appData, documentProgress, activityList, noteList, progress] = await Promise.all([
+      const [appData, documentProgress, activityList, noteList, progress, leadProfile] = await Promise.all([
         applicationService.getById(resolvedLeadId, applicationId),
         applicationService.getDocumentProgress(resolvedLeadId, applicationId).catch(() => []),
         applicationService.getActivities(resolvedLeadId, applicationId).catch(() => []),
         applicationService.getNotes(resolvedLeadId, applicationId).catch(() => []),
         applicationService.getStageProgress(resolvedLeadId, applicationId).catch(() => null),
+        // The application detail DTO carries no leadInfo, so the Applicant field
+        // was always "-". Pull the name from the lead profile instead.
+        leadService.getProfile(resolvedLeadId).catch(() => null),
       ]);
 
-      setApplication(appData);
-      setDocuments((Array.isArray(documentProgress) ? documentProgress : documentProgress?.items ?? []).map(normalizeDocumentRequirement));
+      const personal = leadProfile?.personal ?? null;
+      setApplication(personal
+        ? {
+          ...appData,
+          lead: {
+            ...(appData.lead ?? {}),
+            fullName: appData.lead?.fullName ?? personal.fullName ?? null,
+            email: appData.lead?.email ?? personal.email ?? null,
+            phone: appData.lead?.phone ?? personal.phoneNumber ?? null,
+          },
+        }
+        : appData);
+      setDocuments((Array.isArray(documentProgress)
+        ? documentProgress
+        : documentProgress?.progressBarItems ?? documentProgress?.items ?? []).map(normalizeDocumentRequirement));
       setActivities((Array.isArray(activityList) ? activityList : []).map(normalizeActivity));
       setNotes((Array.isArray(noteList) ? noteList : []).map(normalizeNote));
       setStageProgress(normalizeStageProgress(progress));
@@ -327,6 +363,18 @@ const ApplicationDetails = () => {
       setSavingAction(false);
     }
   };
+
+  // The backend rejects these without remarks, so require them up front rather
+  // than letting the user discover it via a 400.
+  const statusNeedsRemarks = STATUSES_REQUIRING_REMARKS.includes(newStatus);
+
+  // A stage move needs remarks when it goes backwards. stage-progress gives the
+  // authoritative order; without it we cannot tell, so we don't force it.
+  const stageOrder = (code) => stageProgress.find((s) => s.value === code)?.order ?? null;
+  const currentStageOrder = stageOrder(application?.stage);
+  const targetStageOrder = stageOrder(newStage);
+  const stageNeedsRemarks =
+    currentStageOrder != null && targetStageOrder != null && targetStageOrder < currentStageOrder;
 
   if (loading) {
     return (
@@ -624,7 +672,10 @@ const ApplicationDetails = () => {
                           </label>
                         )}
 
-                        {effectiveStatus !== 'VERIFIED' && (
+                        {/* A requirement with no uploaded file cannot be
+                            verified - the backend returns 400 "Requirement
+                            cannot be marked as verified". */}
+                        {hasFile && effectiveStatus !== 'VERIFIED' && (
                           <Button variant="ghost" size="small" disabled={busy} onClick={() => handleDocumentStatus(doc, 'VERIFIED')}>
                             Verify
                           </Button>
@@ -650,9 +701,10 @@ const ApplicationDetails = () => {
           <Card title="Notes & Comments">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
               {notes.length > 0 ? (
-                notes.map((note) => (
-                  <div key={note.id} style={{ padding: '16px', backgroundColor: colors.appBg, borderRadius: '8px' }}>
-                    {editingNote?.id === note.id ? (
+                notes.map((note, index) => (
+                  <div key={note.id ?? index} style={{ padding: '16px', backgroundColor: colors.appBg, borderRadius: '8px' }}>
+                    {/* Guard on a truthy id so a missing one can never match. */}
+                    {editingNote && note.id && editingNote.id === note.id ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <textarea
                           value={editingNoteText}
@@ -828,7 +880,10 @@ const ApplicationDetails = () => {
             <Button variant="ghost" onClick={() => { setShowStatusModal(false); setRemarks(''); }}>
               Cancel
             </Button>
-            <Button onClick={handleUpdateStatus} disabled={savingAction || !newStatus}>
+            <Button
+              onClick={handleUpdateStatus}
+              disabled={savingAction || !newStatus || (statusNeedsRemarks && !remarks.trim())}
+            >
               {savingAction ? 'Saving...' : 'Update Status'}
             </Button>
           </>
@@ -844,8 +899,13 @@ const ApplicationDetails = () => {
           />
           <div>
             <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: colors.textPrimary, fontWeight: '500' }}>
-              Remarks (optional)
+              {statusNeedsRemarks ? 'Remarks (required)' : 'Remarks (optional)'}
             </label>
+            {statusNeedsRemarks && (
+              <p style={{ margin: '-4px 0 8px', fontSize: '12px', color: colors.textSecondary }}>
+                Moving to {APPLICATION_STATUS.label(newStatus)} requires a reason.
+              </p>
+            )}
             <textarea
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
@@ -875,7 +935,10 @@ const ApplicationDetails = () => {
             <Button variant="ghost" onClick={() => { setShowStageModal(false); setRemarks(''); }}>
               Cancel
             </Button>
-            <Button onClick={handleUpdateStage} disabled={savingAction || !newStage}>
+            <Button
+              onClick={handleUpdateStage}
+              disabled={savingAction || !newStage || (stageNeedsRemarks && !remarks.trim())}
+            >
               {savingAction ? 'Saving...' : 'Update Stage'}
             </Button>
           </>
@@ -891,8 +954,13 @@ const ApplicationDetails = () => {
           />
           <div>
             <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: colors.textPrimary, fontWeight: '500' }}>
-              Remarks (optional)
+              {stageNeedsRemarks ? 'Remarks (required)' : 'Remarks (optional)'}
             </label>
+            {stageNeedsRemarks && (
+              <p style={{ margin: '-4px 0 8px', fontSize: '12px', color: colors.textSecondary }}>
+                Moving back to an earlier stage requires a reason.
+              </p>
+            )}
             <textarea
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}

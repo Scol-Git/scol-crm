@@ -1,15 +1,14 @@
-// Course search + course details, backed by the real SCOL search endpoints.
+// Course search, details and editing — backed by the CRM course endpoints.
 //
-// These live under /search and /courses rather than /crm. They're the lead-facing
-// discovery endpoints, but they're the only real source of course/university data
-// the backend exposes, and they work with or without a token.
+// Contracts verified live against the dev backend on 2026-08-23:
+//   POST  /crm/search                 CrmCourseSearchRequestDto -> { pagination, courses[] }
+//   GET   /crm/search/filters                                   -> { filters: [{ name, values[] }] }
+//   GET   /crm/courses/{courseId}                               -> { courseDetails, meta[] }
+//   PATCH /crm/courses/{courseId}     UpdateCrmCourseRequestDto  (ADMIN only)
+//   GET   /categories/cities?countryId=<uuid>                    -> { cities: [{ id, name }] }
 //
-// Contracts used here (all verified against the live QA backend):
-//   POST /search              SearchRequestDto          -> SearchResponseDto
-//   POST /search/advanced     AdvancedSearchRequestDto  -> SearchResponseDto
-//   GET  /search/advanced/filters                       -> { filters: [{ name, values[] }] }
-//   GET  /categories/cities?countryId=<uuid>            -> { cities: [{ id, name }] }
-//   GET  /courses/{id}                                  -> CourseDetailsResponseDto
+// These replace the lead-facing /search, /search/advanced and /courses/{id}
+// endpoints the CRM used before the backend grew /crm equivalents.
 import { api, extractList } from './apiClient';
 
 const PAGE_LIMIT = 15;
@@ -21,9 +20,9 @@ export const MONTHS = [
   { value: 10, label: 'Oct' }, { value: 11, label: 'Nov' }, { value: 12, label: 'Dec' },
 ];
 
-// A course card. `courseId` is documented as "Course intake ID" - it's the id
-// GET /courses/{id} expects, so it's what we navigate with.
-const normalizeCourse = (raw) => ({
+// `courseId` is the course-intake id; the CRM course-details endpoint documents
+// it as "the same identifier returned by search/list endpoints".
+const normalizeCourse = (raw = {}) => ({
   id: raw.courseId,
   name: raw.courseName,
   imgUrl: raw.imgUrl ?? raw.university?.imgUrl ?? null,
@@ -47,9 +46,9 @@ const normalizeCourse = (raw) => ({
   _raw: raw,
 });
 
-// Maps the Advanced Search modal's state onto AdvancedSearchRequestDto.
-// Intake months come from the month chips: the backend takes a *range*
-// (fromMonth/toMonth), so we send the span covering the selected months.
+// Maps the Advanced Search modal onto SearchFiltersDto / SearchRangesDto /
+// SearchFlagsDto (shared by /search and /crm/search). Intake months come from
+// the chips; the backend takes a range, so we send the span they cover.
 export const buildCourseQuery = ({
   countryId, cityId, programmeId,
   intakeYear, intakeMonths = [],
@@ -94,20 +93,11 @@ export const buildCourseQuery = ({
 };
 
 export const courseService = {
-  // Plain text search. searchText matches course name, university and country.
-  async search({ searchText, cursor, limit } = {}) {
-    const data = await api.post('/search', {
+  // One endpoint covers both plain text and faceted search.
+  async search({ searchText, filters, ranges, flags, cursor, limit } = {}) {
+    const data = await api.post('/crm/search', {
       pagination: { limit: limit ?? PAGE_LIMIT, ...(cursor ? { cursor } : {}) },
       ...(searchText?.trim() ? { searchText: searchText.trim() } : {}),
-    });
-    const { items, pagination } = extractList(data, ['courses']);
-    return { courses: items.map(normalizeCourse), pagination };
-  },
-
-  // Faceted search - the Advanced Search modal.
-  async searchAdvanced({ filters, ranges, flags, cursor, limit } = {}) {
-    const data = await api.post('/search/advanced', {
-      pagination: { limit: limit ?? PAGE_LIMIT, ...(cursor ? { cursor } : {}) },
       ...(filters ? { filters } : {}),
       ...(ranges ? { ranges } : {}),
       ...(flags ? { flags } : {}),
@@ -116,30 +106,38 @@ export const courseService = {
     return { courses: items.map(normalizeCourse), pagination };
   },
 
+  // Kept as an alias so existing callers that distinguished the two still work.
+  async searchAdvanced(opts) {
+    return this.search(opts);
+  },
+
   async getById(courseId) {
-    const data = await api.get(`/courses/${courseId}`);
+    const data = await api.get(`/crm/courses/${courseId}`);
     return {
       course: data?.courseDetails ?? null,
-      // meta[] carries the tooltip copy, keyed by infoKey (rankingMetaData, ...)
+      // meta[] carries tooltip copy keyed by infoKey (rankingMetaData, …)
       meta: Object.fromEntries((data?.meta ?? []).map((m) => [m.infoKey, m])),
     };
   },
 
-  // Country + programme lookups. This endpoint is public and is currently the
-  // only real source for either (there is no /crm lookup endpoint yet).
+  // Partial update — ADMIN only. Only send the fields being changed.
+  async update(courseId, patch) {
+    return api.patch(`/crm/courses/${courseId}`, patch);
+  },
+
   async getFilterOptions() {
-    const data = await api.get('/search/advanced/filters');
+    const data = await api.get('/crm/search/filters');
     const byName = Object.fromEntries((data?.filters ?? []).map((f) => [f.name, f.values ?? []]));
     return {
       countries: byName.country ?? [],
       programmes: byName.programme ?? [],
+      raw: byName,
     };
   },
 
-  // Cities are cascading: the countryId query param is REQUIRED. Without it the
-  // endpoint returns an empty array rather than an error, which reads as "no
-  // cities exist". The backend also returns duplicate names with distinct ids,
-  // so de-dupe by name to keep the dropdown usable.
+  // Cities cascade off country. `countryId` is a REQUIRED query param: without
+  // it the endpoint returns an empty array rather than an error. The backend
+  // also returns duplicate names with distinct ids, so de-dupe by name.
   async getCities(countryId) {
     if (!countryId) return [];
     const data = await api.get(`/categories/cities?countryId=${encodeURIComponent(countryId)}`);

@@ -56,6 +56,24 @@ export const tokenStorage = {
   },
 };
 
+// The login response now includes user.userRole (e.g. ["ADMIN"]). Verified live.
+export const CRM_ROLES = ['ADMIN', 'COUNSELLOR'];
+
+export function getUserRoles(user = tokenStorage.getUser()) {
+  const r = user?.userRole ?? user?.roles ?? user?.role;
+  if (!r) return [];
+  return (Array.isArray(r) ? r : [r]).map((x) => String(x).toUpperCase());
+}
+
+export function hasCrmAccess(user) {
+  const roles = getUserRoles(user);
+  return roles.some((r) => CRM_ROLES.includes(r));
+}
+
+export function isAdmin(user) {
+  return getUserRoles(user).includes('ADMIN');
+}
+
 let refreshPromise = null;
 
 async function refreshAccessToken() {
@@ -106,19 +124,21 @@ class ApiError extends Error {
   }
 }
 
-// The backend authenticates leads and staff through the same /auth/login, and
-// the user object carries no role, so the only signal that an account lacks CRM
-// access is this error coming back from a /crm/* call. It arrives as a 404,
-// which reads as "endpoint missing" unless we translate it.
+// CRM endpoints require an ADMIN or COUNSELLOR role. Two distinct rejections:
+//   403 — authenticated, but the role isn't allowed (documented).
+//   404 "Consultant user not found" — authenticated, but no consultant record
+//        exists for this user. Reads as "endpoint missing" unless translated.
 const CRM_ACCESS_PATTERN = /consultant\s+user\s+not\s+found|consultant\s+not\s+found/i;
 
 function buildError(path, res, json) {
   const raw = json?.message || `Request failed with status ${res.status}`;
   const isCrmPath = path.startsWith('/crm/');
 
-  if (isCrmPath && CRM_ACCESS_PATTERN.test(raw)) {
+  if (isCrmPath && (res.status === 403 || CRM_ACCESS_PATTERN.test(raw))) {
     const err = new ApiError(
-      'This account does not have CRM access. It is signed in successfully, but has no consultant record on the backend, so CRM data cannot be loaded. Ask the backend team to attach a consultant record to this user.',
+      res.status === 403
+        ? 'This account is signed in but does not have CRM permissions. CRM screens require an ADMIN or COUNSELLOR role.'
+        : 'This account does not have CRM access. It is signed in successfully, but has no consultant record on the backend, so CRM data cannot be loaded. Ask the backend team to attach a consultant record to this user.',
       res.status,
       json?.error?.code,
     );
@@ -203,6 +223,7 @@ export const api = {
   get: (path, opts) => request(path, { ...opts, method: 'GET' }),
   post: (path, body, opts) => request(path, { ...opts, method: 'POST', body }),
   put: (path, body, opts) => request(path, { ...opts, method: 'PUT', body }),
+  patch: (path, body, opts) => request(path, { ...opts, method: 'PATCH', body }),
   delete: (path, opts) => request(path, { ...opts, method: 'DELETE' }),
 };
 

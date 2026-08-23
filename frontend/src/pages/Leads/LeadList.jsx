@@ -35,6 +35,10 @@ const LeadList = () => {
     leadStatus: 'NewLead',
     hasPassedEnglishTest: 'false',
   });
+  // Snapshot of the edit form as first shown, so save can diff against it.
+  const [editBaseline, setEditBaseline] = useState(null);
+  // Portal password the backend generates for a new lead - shown once.
+  const [newLeadCredentials, setNewLeadCredentials] = useState(null);
   const [filters, setFilters] = useState({
     dateFrom: '',
     dateTo: '',
@@ -140,12 +144,15 @@ const LeadList = () => {
     setSaving(true);
     setSaveError('');
     try {
-      await leadService.create({
+      const created = await leadService.create({
         ...formData,
         hasPassedEnglishTest: formData.hasPassedEnglishTest === 'true',
       });
       setShowAddModal(false);
       resetForm();
+      // The backend generates the lead's portal password and returns it only
+      // on this response - it cannot be looked up later, so show it once.
+      if (created?.password) setNewLeadCredentials(created);
       loadLeads();
     } catch (err) {
       console.error('Failed to create lead:', err);
@@ -158,13 +165,26 @@ const LeadList = () => {
   const handleEditLead = async () => {
     if (!validateForm()) return;
 
+    // Send only edited fields - see leadService.update for why sending the
+    // whole form silently overwrote status/source with placeholder defaults.
+    const changes = {};
+    Object.keys(formData).forEach((key) => {
+      if (editBaseline && formData[key] === editBaseline[key]) return;
+      changes[key] = key === 'hasPassedEnglishTest'
+        ? formData[key] === 'true'
+        : formData[key];
+    });
+
+    if (Object.keys(changes).length === 0) {
+      setShowEditModal(false);
+      resetForm();
+      return;
+    }
+
     setSaving(true);
     setSaveError('');
     try {
-      await leadService.update(selectedLead.id, {
-        ...formData,
-        hasPassedEnglishTest: formData.hasPassedEnglishTest === 'true',
-      });
+      await leadService.update(selectedLead.id, changes);
       setShowEditModal(false);
       resetForm();
       loadLeads();
@@ -178,7 +198,10 @@ const LeadList = () => {
 
   const openEditModal = (lead) => {
     setSelectedLead(lead);
-    setFormData({
+    // Prefill only from the row we actually have. The list DTO carries no
+    // address/city/gender, so those stay blank - and because save diffs against
+    // this snapshot, leaving them blank will not overwrite the stored values.
+    const next = {
       fullName: lead.fullName || '',
       phone: lead.phone || '',
       email: lead.email || '',
@@ -187,11 +210,13 @@ const LeadList = () => {
       gender: lead.gender || '',
       targetCountryId: lead.targetCountryId || '',
       consultantId: lead.consultantId || '',
-      registerSource: lead.registerSource || 'Offline',
-      leadStatus: lead.status || 'NewLead',
+      registerSource: lead.registerSource || '',
+      leadStatus: lead.status || '',
       hasPassedEnglishTest: lead.hasPassedEnglishTest ? 'true' : 'false',
       enrollmentStatus: lead.enrollmentStatus || '',
-    });
+    };
+    setFormData(next);
+    setEditBaseline(next);
     setShowEditModal(true);
   };
 
@@ -736,6 +761,51 @@ const LeadList = () => {
             onChange={handleInputChange}
             options={booleanOptions}
           />
+        </div>
+      </Modal>
+
+      {/* Portal credentials for a just-created lead. The backend returns the
+          generated password once, on the create response only. */}
+      <Modal
+        isOpen={!!newLeadCredentials}
+        onClose={() => setNewLeadCredentials(null)}
+        title="Lead created"
+        size="small"
+        footer={<Button onClick={() => setNewLeadCredentials(null)}>Done</Button>}
+      >
+        <Alert variant="warning">
+          These are the lead&apos;s portal sign-in details. The password is shown only now and
+          cannot be retrieved later - copy it before closing.
+        </Alert>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
+          {[
+            { label: 'Phone', value: newLeadCredentials?.phone },
+            { label: 'Password', value: newLeadCredentials?.password },
+          ].map((row) => (
+            <div key={row.label}>
+              <div style={{ fontSize: '12px', color: colors.textSecondary, marginBottom: '4px' }}>
+                {row.label}
+              </div>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px',
+                padding: '10px 12px', backgroundColor: colors.appBg,
+                border: `1px solid ${colors.borderLight}`, borderRadius: '8px',
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '14px',
+                color: colors.textPrimary, wordBreak: 'break-all',
+              }}>
+                <span>{row.value || '-'}</span>
+                {row.value && (
+                  <Button
+                    variant="ghost"
+                    size="small"
+                    onClick={() => navigator.clipboard?.writeText(row.value)}
+                  >
+                    Copy
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       </Modal>
     </div >

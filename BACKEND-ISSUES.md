@@ -1,207 +1,218 @@
-# SCOL Backend — Issues Blocking the CRM
+# SCOL Backend — Issues Affecting the CRM
 
-Problems on the **API side** only. Frontend defects are fixed and tracked separately in [API-INVENTORY.md](API-INVENTORY.md).
+For the backend team. Frontend status lives in [API-INVENTORY.md](API-INVENTORY.md).
 
-**Backend:** `https://scol-backend-qa.vercel.app` · **Spec:** `/swagger-json` · **Verified:** 2026-08-13
+**Backend:** `https://scol-dev-test-u3dku.ondigitalocean.app` · **Verified live:** 2026-08-23 with an `ADMIN` account · **73 endpoints**
 
 ---
 
-## Summary
+## ✅ Resolved since the last review
+
+The previous round of issues is largely fixed — recorded here so nobody re-reports them.
+
+| Was | Now |
+| --- | --- |
+| No `role` on the user object | ✅ Login returns `user.userRole` (e.g. `["ADMIN"]`) and the JWT carries `roles` + `permissions`. The CRM now gates on it. |
+| No response schemas on any `/crm/*` endpoint | ✅ All 39 CRM operations have documented response DTOs, and every one matched the live response. |
+| No `GET /crm/leads/{leadId}` | ✅ `GET /crm/leads/{leadId}/profile` covers it — the frontend's cursor-walk workaround is gone. |
+| No CRM view of a lead's profile / documents | ✅ Profile returns personal info, academic + English results, shared documents and the application journey, with verify and delete endpoints. |
+| No CRM university or course endpoints | ✅ `/crm/universities/*`, `/crm/courses/*` and `/crm/search` all exist. Course and university editing now persist. |
+| No dashboard endpoint | ✅ `GET /crm/dashboard` with date range and `recentLeadLimit`. |
+| `/categories/cities` returns an empty list | ✅ Now documented as requiring `countryId`. |
+
+---
+
+## Summary of what's still open
 
 | # | Issue | Severity | Blocks |
 | --- | --- | --- | --- |
-| 1 | No `role` on the user object | 🔴 Blocker | All CRM access control |
-| 2 | `/crm/*` returns 404 for non-consultants | 🔴 Blocker | Diagnosing login problems |
-| 3 | No response schemas on any `/crm/*` endpoint | 🔴 Blocker | Trusting any CRM response shape |
-| 4 | No `GET /crm/leads/{leadId}` | 🟠 High | Lead Details on refresh / direct link |
-| 5 | No CRM view of a lead's profile or documents | 🟠 High | Consultants reading lead records |
-| 6 | Pagination capped at 50, no total count | 🟡 Medium | Page numbers, "X of Y" |
-| 7 | `/crm/leads/list` returns 201 for a read | ⚪ Low | Nothing — cosmetic |
-| 8 | `/auth/refresh` returns 400 instead of 401 | ⚪ Low | Nothing — handled |
-| 9 | 3 endpoints mis-declared as requiring auth | ⚪ Low | Spec accuracy |
-| 10 | `/categories/cities` returns an empty list | ⚪ Low | City lookups |
+| 0 | **Document storage bucket has no CORS policy** | 🔴 **High** | **All document uploads** |
+| 1 | Duplicate city records with distinct UUIDs | 🟠 Medium | Trustworthy city filtering |
+| 2 | `POST /crm/leads/list` returns **201** for a read | ⚪ Low | Nothing — cosmetic |
+| 3 | `/auth/refresh` returns **400** instead of 401 | ⚪ Low | Nothing — handled |
+| 4 | Pagination has no total count, `limit` capped at 50 | 🟡 Minor | Page numbers, "showing X of Y" |
+| 5 | No Tasks, Reports, or account-management endpoints | 🟠 Medium | Three CRM screens |
+| 6 | `/search`, `/home`, `/search/advanced` marked auth-required | ⚪ Low | Spec accuracy only |
+| 7 | `GET /crm/dashboard` `recentLeads[]` carry no `leadId` | 🟠 Medium | Clicking through to a lead |
+| 8 | Write endpoints return `{success:true}` instead of the record | 🟡 Minor | Forces an extra read after every save |
+| 9 | `GET /crm/courses/{id}` omits duration and application deadline | 🟡 Minor | Prefilling the course edit form |
+| 10 | No `DELETE /crm/leads/{leadId}` | 🟡 Minor | Removing a lead (incl. test data) |
 
 ---
 
-## 🔴 1. The user object carries no role
+## 🔴 0. Document uploads are blocked by CORS — nothing can be uploaded
 
-`AuthResponseUserDto` — returned by `/auth/login`, `/auth/verify-otp`, `/auth/refresh`:
+The presigned flow itself is correct: `upload-url` returns a valid ticket
+(`documentId`, `documentVersionId`, `uploadUrl`, `headers`, `expiresInSeconds`).
+But the browser cannot complete step 2, the `PUT` to storage:
 
-```jsonc
-{ "userId": "uuid", "academicFormStatus": "INCOMPLETE|PARTIALLY_COMPLETED|COMPLETED",
-  "fullName": "…", "joinedAt": 2023, "imgUrl": "…" }
+```text
+Access to fetch at 'https://s3.us-east-005.backblazeb2.com/scol-documents/leads/…'
+from origin 'http://localhost:5199' has been blocked by CORS policy
+→ TypeError: Failed to fetch
 ```
 
-There is **no `role`, no permissions, no account-type field.**
+The Backblaze bucket needs a CORS rule allowing `PUT` (and the signed headers)
+from the CRM origins. Until then **no document can be attached to any
+application from the browser** — the feature is fully built on our side and
+fails at the last step.
 
-Leads and staff authenticate through the same `POST /auth/login`. The frontend therefore cannot tell whether the person who just logged in is a lead, a consultant, or an admin. Consequences:
-
-- No menu item, route, or action can be permission-gated.
-- A lead's token is accepted by the CRM login screen; the app looks logged in, then every screen fails.
-- We only discover the account lacks CRM access when a `/crm/*` call fails (see #2).
-
-**Ask:** add `role` (e.g. `ADMIN` / `CONSULTANT` / `LEAD`) to `AuthResponseUserDto`, and optionally a `permissions` array.
+Also worth checking: the returned `uploadUrl` embeds a **different**
+`document-types/{id}` segment than the one requested
+(requested `3f39f1ad-…` / PASSPORT, URL contained `15ceadef-…`).
 
 ---
 
-## 🔴 2. `/crm/*` returns **404** when the user isn't a consultant
+## 🟠 1. `/categories/cities` returns duplicate city names with different UUIDs
 
-Reproduced live. Logged in successfully, then:
-
+```http
+GET /categories/cities?countryId=22ae0ae2-50b6-43d9-9b4d-db071fb4c595   (Canada)
+→ 200  { "cities": [
+    { "id": "def90df7-…", "name": "Calgary" },
+    { "id": "d7e4e311-…", "name": "Calgary" },
+    { "id": "e6f128ee-…", "name": "Calgary" },
+    { "id": "a889dcbd-…", "name": "Calgary" }, … ] }
 ```
-POST /crm/leads/list
-→ 404  {"status":"error","message":"Consultant user not found","statusCode":404}
-```
 
-The token is valid — this is a 404, not a 401, so the backend authenticated the user and *then* failed to find a consultant record for them.
+Four separate `Calgary` rows, each with its own id. The CRM de-duplicates by name so the dropdown is usable, but that means we pick one id arbitrarily — and filtering by it will only match courses attached to *that* city record.
 
-Two problems:
-
-1. **Wrong status code.** 404 means "no such resource". This is an authorization failure and should be **403 Forbidden**. As a 404 it's indistinguishable from a missing/misspelled endpoint — it cost real debugging time to work out that the URL was fine and the *account* was wrong.
-2. **Undocumented.** Swagger lists only `201` for `POST /crm/leads/list`. No 4xx responses are declared on any CRM endpoint, so there was no way to anticipate this.
-
-**Ask:** return `403` with a distinguishable error code (e.g. `NO_CRM_ACCESS`), and document the error responses.
-
-> **Frontend mitigation already shipped:** `apiClient` detects this message on `/crm/*` paths and shows "This account does not have CRM access…" instead of the raw string. That is a workaround, not a fix.
-
-**Also needed:** a QA account with a consultant record, so the CRM can be tested end-to-end at all. Nothing below #3 can be verified against live data until this exists.
+This looks like a data-seeding problem rather than an API bug. Worth checking whether these should be merged.
 
 ---
 
-## 🔴 3. No response schemas on any `/crm/*` endpoint
+## ⚪ 2. `POST /crm/leads/list` returns 201 for a read operation
 
-**All 23 CRM endpoints** declare a response with no schema:
-
-```
-POST /crm/leads/list                → 201, no schema
-GET  /crm/leads/dropdown-data       → 200, no schema
-GET  /crm/leads/{id}/applications   → 200, no schema
-… and 20 more
-```
-
-Every response shape the frontend relies on is inferred. A `200 OK` whose keys differ from our guess renders an empty table and throws no error — the worst possible failure mode.
-
-What we inferred, and would like confirmed:
-
-```jsonc
-// The convention we observed on the *documented* /home and /search endpoints:
-{ "status": "success", "message": "…", "statusCode": 200,
-  "data": { "<entityName>": [ … ],
-            "pagination": { "cursor": "…", "limit": 15, "hasNext": true } } }
-```
-
-Specifically we need the exact shape of:
-
-- the list envelope — is the array under `leads` / `items` / `results`?
-- the pagination object, and whether a total count exists
-- the nested `lead` / `university` / `course` objects on an application
-- `document-progress` — how requirements and uploaded documents are represented
-- `stage-progress` — the per-stage fields (`completed`? `current`? timestamps?)
-- `dropdown-data` for both leads and applications
-
-**Encouraging sign:** where the backend *does* document a schema it is accurate. We fetched `GET /courses/{id}` with a real id and the live keys matched `CourseDetailsResponseDto` exactly. So this is missing annotations, not drift — adding `@ApiOkResponse({ type: … })` to the CRM controllers should be enough.
+Confirmed live: still `201`. `POST /crm/search` does the same. Harmless — the client treats any 2xx as success — but `200` is the conventional response for a read, and the docs say `200`, so spec and behaviour disagree.
 
 ---
 
-## 🟠 4. No `GET /crm/leads/{leadId}`
+## ⚪ 3. `/auth/refresh` returns 400 when the token is missing
 
-There is no way to fetch a single lead. The CRM has create, update, and list — but no read-by-id.
+```http
+GET /auth/refresh   (no Authorization header)
+→ 400  { "message": "Refresh token is required" }
+```
 
-**Impact:** Lead Details works when you click through from the list (the row is passed via router state), but a refresh or a shared link has nothing to load from.
-
-**Current workaround:** we page through `POST /crm/leads/list` following the cursor until the id matches — up to 20 requests to open one lead. It works, but it is obviously wrong.
-
-**Ask:** `GET /crm/leads/{leadId}` returning the same shape as a list row plus any detail-only fields.
+`401` would be conventional for a missing credential. Handled either way.
 
 ---
 
-## 🟠 5. No CRM view of a lead's profile, documents, or activity
+## 🟡 4. Pagination has no total count
 
-`/leads/profile*` exists but is **self-service only** — it has no `leadId` parameter and reads the caller's own record. A consultant cannot open a lead's academic form or documents.
+`CursorPaginationDto` allows `limit` 1–50 and returns `{ cursor, limit, hasNext }`. `CursorPaginationResponseDto` is declared as an empty object in the spec, so the response shape isn't described.
 
-Missing:
+Consequences: no "showing X of Y", no page numbers, no jump-to-last-page. The CRM uses infinite "Load more" instead.
 
-```
-GET /crm/leads/{leadId}/profile              # academic form, English tests, preferences
-GET /crm/leads/{leadId}/documents            # uploaded documents + statuses
-GET /crm/leads/{leadId}/documents/{id}/download
-GET /crm/leads/{leadId}/activities           # timeline / journey events
-GET,POST /crm/leads/{leadId}/notes           # lead-level notes (only application-level notes exist)
-```
+**Ask:** either add `totalCount` to the pagination object, or confirm cursor-only is intentional so we can stop planning around it. Also worth filling in `CursorPaginationResponseDto`, which is currently empty in the spec.
 
 ---
 
-## 🟡 6. Pagination is cursor-only, capped at 50, with no total
+## 🟠 5. Missing endpoints for three CRM screens
 
-`CursorPaginationDto`: `limit` has `maximum: 50`, and no list response documents a total count.
+| Screen | Needs |
+| --- | --- |
+| **Tasks** | Full CRUD — list (filter by status/lead/assignee), create, update, change status, delete. Nothing exists; the page is entirely mock. |
+| **Reports** | `summary`, `monthly`, `by-country` over a date range. `GET /crm/dashboard` covers some of this but not the report breakdowns. |
+| **Settings** | `GET /auth/me` (or `/users/me`), profile update, change password, avatar upload. `imgUrl` exists on the user DTO but there's no upload path. |
 
-**Impact:** no "showing X of Y", no page numbers, no jump-to-last-page. The UI can only offer "Load more". It also means server-side filtering cannot be verified against a known total.
-
-**Ask:** either add `totalCount` to the list response envelope, or confirm cursor-only is intentional so the UI can commit to infinite scroll permanently.
-
----
-
-## ⚪ 7. `POST /crm/leads/list` returns **201** for a read operation
-
-A search/list endpoint returning `201 Created` is misleading. Harmless — our client treats any `res.ok` as success — but it reads as a bug to anyone inspecting traffic. Same for `POST /crm/applications/list`.
-
-**Ask:** return `200`.
+Also still missing: **states, degrees, English tests and intakes** lookups. Countries and programmes come from `/crm/search/filters`, cities from `/categories/cities`, but these four have no endpoint, so those form fields stay mock-backed.
 
 ---
 
-## ⚪ 8. `/auth/refresh` returns 400 when the token is missing
+## ⚪ 6. Three endpoints are declared as requiring auth but are public
 
-```
-GET /auth/refresh  (no Authorization header)
-→ 400  {"status":"error","message":"Refresh token is required","statusCode":400}
-```
+`POST /home`, `POST /search`, `POST /search/advanced` are marked `JWT-auth` in the spec but return data without a token, reporting `userState: "NOT_LOGGED_IN"`.
 
-A missing credential is conventionally `401`. Handled correctly on our side (any non-ok response fails the refresh), so this is cosmetic consistency only.
+No data leak — it's a public course catalogue — but the spec is misleading. Either mark them optional-auth or enforce the guard.
 
 ---
 
-## ⚪ 9. Three endpoints are declared as requiring auth but are public
+## 🟠 7. `recentLeads[]` has no `leadId`
 
-`POST /home`, `POST /search`, `POST /search/advanced` are marked `JWT-auth` in Swagger, but all three return `200`/`201` with full course data and **no token**, reporting `"userState": "NOT_LOGGED_IN"`.
-
-This is optional-auth behaviour (public catalogue, personalised when signed in) documented as required auth. **No data is leaked** — but the spec is misleading for anyone integrating against it.
-
-**Ask:** mark them as optional auth, or remove the security requirement.
+`GET /crm/dashboard` returns recent leads as `{ name, email, phone,
+targetUniversity, status }` — no id. The Dashboard therefore cannot link a row
+to its lead; navigating with any synthesised key returns
+`400 Validation failed (uuid is expected)`. The row click has been removed until
+`leadId` is added.
 
 ---
 
-## ⚪ 10. `/categories/cities` has a required parameter that Swagger doesn't declare
+## 🟡 8. Write endpoints don't return the updated record
 
-The endpoint works, but only with a `countryId` query param. Swagger declares **no parameters at all**, so the obvious call looks like an empty/broken endpoint:
+`PUT /crm/leads/{leadId}` and the note/status/stage writes all return
+`{ "success": true }`. `POST /crm/leads` returns only
+`{ success, newLeadInfo: { phone, password } }` — not the created lead, so the
+caller doesn't even learn its id.
 
-```
-GET /categories/cities
-→ 200  {"status":"success","data":{"cities":[]}}          ← reads as "no cities exist"
+Every save therefore needs a follow-up read to refresh the screen. Returning the
+affected entity (or at least its id) would remove a round trip from each one.
 
-GET /categories/cities?countryId=22ae0ae2-50b6-43d9-9b4d-db071fb4c595
-→ 200  {"cities":[{"id":"def90df7-…","name":"Calgary"}, …]}   ← works
-```
+**Related, and worth documenting explicitly:** `PUT /crm/leads/{leadId}` is a
+*partial* update — an empty body returns 200 and omitted fields keep their
+stored values. That's the sensible behaviour, but it isn't stated anywhere, and
+assuming the opposite is an easy way to lose data.
 
-Returning `200 []` for a missing required parameter is the problem — a `400` naming the missing param would have made this self-evident. Please either document `countryId` as a required parameter, or return 400 when it's absent. (Note `countryIds`, plural, silently returns empty too.)
+---
 
-**Also: the response contains duplicate city names with different UUIDs** — Canada returns "Calgary" four times, each with a distinct id. The CRM de-dupes by name client-side to keep the dropdown usable, but that means we're guessing which id is canonical. This looks like a data-seeding problem worth checking.
+## 🟡 9. `GET /crm/courses/{courseId}` omits two editable fields
 
-**Lookup coverage overall:** countries and programmes are available publicly via `GET /search/advanced/filters` (8 countries, 120 programmes, real UUIDs). Cities work as above. **States, degrees, English tests, and intakes have no endpoint at all.**
+`PATCH /crm/courses/{courseId}` accepts `courseDuration` and
+`applicationDeadline`, but the GET returns neither, so the edit form cannot show
+their current values. `durationMonths` *is* present on `POST /crm/search`
+results — the CRM now carries it over from the list as a workaround, but a
+direct link to a course still can't prefill it, and the deadline is unavailable
+on any endpoint.
+
+---
+
+## 🟡 10. No way to delete a lead
+
+`DELETE /crm/leads/{leadId}` returns `404 Cannot DELETE …`. There's no delete or
+archive path, so mistakes and test records are permanent.
+
+Two probe leads created during verification are stuck in the dev database and
+need removing server-side: **"ZZ Audit Probe"** (`01900000001`) and
+**"ZZ Cred Probe"** (`01900000042`).
+
+---
+
+## Reference: when remarks are mandatory
+
+Not an issue — undocumented behaviour worth recording, since the spec marks
+`remarks` optional on both endpoints. Verified live:
+
+| Change | Remarks |
+| --- | --- |
+| status → `IN_PROGRESS`, `PENDING` | optional |
+| status → `ON_HOLD` | **required** — *"Remarks are required for this application status"* |
+| status → `COMPLETED`, `REJECTED`, `CANCELLED` | **required** — *"…when moving to a terminal application status"* |
+| stage → forwards | optional |
+| stage → backwards | **required** — *"…when moving to an earlier application stage"* |
+
+The CRM now requires remarks in these cases before enabling Save.
+
+Separately, a document *requirement* with no uploaded file cannot be verified
+(`400 Requirement cannot be marked as verified`) — the CRM now hides Verify
+until a file exists.
 
 ---
 
 ## Verification notes
 
-All 55 endpoints were probed live on 2026-08-13.
+Probed live on 2026-08-23 with `admin@admin.com` (role `ADMIN`).
 
-- ✅ **Routing is healthy** — no 404s on unknown routes, no 5xx. Every path in Swagger is really deployed with the documented method.
-- ✅ **Auth guards work** — every `/crm/*` endpoint returns a clean 401 without a token.
-- ✅ **Documented schemas are accurate** where they exist (see #3).
-- ⛔ **CRM responses remain unverified** — blocked on #2 (no consultant account).
+- ✅ **All 73 endpoints route correctly** — no 404s on known routes, no 5xx.
+- ✅ **Every CRM response matched its documented DTO.** This was the biggest previous risk and it is now closed.
+- ✅ **Role is present end to end** — login response, JWT claims, and 403s on role failure.
+- ⚠️ **The dev database is nearly empty.** `POST /crm/leads/list` returns only leads *created through the CRM* — the pre-existing lead-app registrations (Arvind, Fahmidur Rahman) never appear, though `/crm/dashboard` counts them and applications reference them. Worth confirming this scoping is deliberate, and seeding a few CRM-owned leads either way.
 
-## What would unblock us fastest
+### Re-verified 2026-08-23 (second pass, driving the UI in a browser)
 
-1. A QA account with a consultant record (#2) — lets us verify everything else.
-2. `role` on the user object (#1).
-3. Response schemas on the CRM controllers (#3).
-4. `GET /crm/leads/{leadId}` (#4).
+Every CRM screen was exercised end to end with a real session, not just probed.
+Confirmed working: dashboard metrics and charts, lead list/filters/create/edit,
+application list, stat cards, filters, status and stage changes, note CRUD,
+stage and document progress, activities, course search, advanced search with the
+country→city cascade, course and university editing, and all four auth screens.
+
+Confirmed broken **on the backend side**: issue 0 (uploads) — everything else
+found in that pass was a frontend defect and has been fixed.

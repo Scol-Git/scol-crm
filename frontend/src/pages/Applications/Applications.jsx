@@ -27,6 +27,7 @@ const Applications = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [pageInfo, setPageInfo] = useState({ cursor: null, hasNext: false });
   const [error, setError] = useState('');
+  const [statistics, setStatistics] = useState(null);
   const [actionError, setActionError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -83,8 +84,9 @@ const Applications = () => {
     setLoading(true);
     setError('');
     try {
-      const { applications: data, pagination } = await applicationService.getAll(currentQuery());
+      const { applications: data, pagination, statistics: stats } = await applicationService.getAll(currentQuery());
       setApplications(data);
+      setStatistics(stats);
       setPageInfo({ cursor: pagination?.cursor ?? null, hasNext: !!pagination?.hasNext });
     } catch (err) {
       console.error('Failed to load applications:', err);
@@ -312,14 +314,22 @@ const Applications = () => {
   ];
 
   const statusOptions = APPLICATION_STATUS.options;
+
+  // The backend rejects these status changes without remarks (verified live),
+  // so require one here instead of surfacing a 400.
+  const statusNeedsRemarks = ['ON_HOLD', 'COMPLETED', 'REJECTED', 'CANCELLED'].includes(newStatus);
   const stageOptions = APPLICATION_STAGE.options;
 
-  // Calculate stats
+  // The list endpoint returns headline counts for the whole result set; the
+  // client-side tallies below only ever saw the current page, so prefer the
+  // server's numbers and fall back only if they're absent.
   const stats = {
-    total: applications.length,
-    pending: applications.filter(a => ['PENDING', 'IN_PROGRESS'].includes(a.status)).length,
-    completed: applications.filter(a => a.status === 'COMPLETED').length,
-    onHold: applications.filter(a => a.status === 'ON_HOLD').length,
+    total: statistics?.totalApplications ?? applications.length,
+    pending: statistics?.pendingReview ?? applications.filter((a) => ['PENDING', 'IN_PROGRESS'].includes(a.status)).length,
+    submitted: statistics?.applicationSubmitted ?? applications.filter((a) => a.stage === 'SUBMITTED').length,
+    pendingDocuments: statistics?.pendingDocuments ?? null,
+    completed: applications.filter((a) => a.status === 'COMPLETED').length,
+    onHold: applications.filter((a) => a.status === 'ON_HOLD').length,
   };
 
   return (
@@ -369,7 +379,7 @@ const Applications = () => {
             </div>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.pending}</div>
-              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>Pending / In Progress</div>
+              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>Pending Review</div>
             </div>
           </div>
         </Card>
@@ -389,8 +399,8 @@ const Applications = () => {
               <CheckCircle size={isMobile ? 18 : 20} />
             </div>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.completed}</div>
-              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>Completed</div>
+              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.submitted}</div>
+              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>Submitted</div>
             </div>
           </div>
         </Card>
@@ -410,8 +420,8 @@ const Applications = () => {
               <GraduationCap size={isMobile ? 18 : 20} />
             </div>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.onHold}</div>
-              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>On Hold</div>
+              <div style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '700', color: colors.textPrimary }}>{stats.pendingDocuments ?? stats.onHold}</div>
+              <div style={{ fontSize: isMobile ? '11px' : '13px', color: colors.textSecondary }}>{stats.pendingDocuments != null ? 'Pending Documents' : 'On Hold'}</div>
             </div>
           </div>
         </Card>
@@ -605,7 +615,10 @@ const Applications = () => {
             }}>
               Cancel
             </Button>
-            <Button onClick={handleSaveStatus} disabled={savingAction || !newStatus}>
+            <Button
+              onClick={handleSaveStatus}
+              disabled={savingAction || !newStatus || (statusNeedsRemarks && !statusRemarks.trim())}
+            >
               {savingAction ? 'Saving...' : 'Update Status'}
             </Button>
           </>
@@ -622,8 +635,13 @@ const Applications = () => {
           />
           <div>
             <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: colors.textPrimary, fontWeight: '500' }}>
-              Remarks (optional)
+              {statusNeedsRemarks ? 'Remarks (required)' : 'Remarks (optional)'}
             </label>
+            {statusNeedsRemarks && (
+              <p style={{ margin: '-4px 0 8px', fontSize: '12px', color: colors.textSecondary }}>
+                Moving to {APPLICATION_STATUS.label(newStatus)} requires a reason.
+              </p>
+            )}
             <textarea
               value={statusRemarks}
               onChange={(e) => setStatusRemarks(e.target.value)}

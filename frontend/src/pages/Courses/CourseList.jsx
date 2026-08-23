@@ -150,11 +150,14 @@ const CourseList = () => {
         }}>
           {courses.map((course) => (
             <Card key={course.id} padding="0" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              {/* Carry the search row over: it has durationMonths, which the
+                  course-details endpoint does not return but the edit form
+                  needs in order to prefill. */}
               <div
                 role="button"
                 tabIndex={0}
-                onClick={() => navigate(`/courses/${course.id}`)}
-                onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/courses/${course.id}`); }}
+                onClick={() => navigate(`/courses/${course.id}`, { state: { course } })}
+                onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/courses/${course.id}`, { state: { course } }); }}
                 style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', flex: 1 }}
               >
                 {/* Cover */}

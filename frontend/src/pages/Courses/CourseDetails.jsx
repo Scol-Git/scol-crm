@@ -63,10 +63,11 @@ const CourseDetails = () => {
   const [openMeta, setOpenMeta] = useState(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
-  // Local-only edit: there is no CRM endpoint to persist course changes yet,
-  // so this updates the view in memory. See BACKEND-ISSUES.md.
+  // Course edit persists via PATCH /crm/courses/{courseId} (ADMIN only).
   const [showEdit, setShowEdit] = useState(false);
-  const [editForm, setEditForm] = useState({ courseName: '' });
+  const [editForm, setEditForm] = useState({ courseName: '', tuitionFee: '', currency: '', courseDuration: '', applicationDeadline: '' });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 768);
@@ -84,7 +85,18 @@ const CourseDetails = () => {
       setCourse(data);
       setMeta(metaMap);
       setActiveTab(data?.tabs?.[0]?.key ?? null);
-      setEditForm({ courseName: data?.courseName ?? '' });
+      const feeItems = data?.feesAndScholarships?.items ?? {};
+      // GET /crm/courses/{id} returns neither courseDuration nor
+      // applicationDeadline, so duration falls back to the search row handed
+      // over by the Courses list. On a direct URL visit it stays blank - the
+      // modal says so rather than showing an empty box that looks current.
+      setEditForm({
+        courseName: data?.courseName ?? '',
+        tuitionFee: feeItems.tuitionFees?.amount ?? '',
+        currency: feeItems.tuitionFees?.currency ?? '',
+        courseDuration: location.state?.course?.durationMonths ?? '',
+        applicationDeadline: '',
+      });
     } catch (err) {
       console.error('Failed to load course:', err);
       setError(err.message || 'Failed to load this course.');
@@ -93,9 +105,30 @@ const CourseDetails = () => {
     }
   };
 
-  const saveEdit = () => {
-    setCourse((prev) => ({ ...prev, courseName: editForm.courseName }));
-    setShowEdit(false);
+  // PATCH /crm/courses/{courseId} is ADMIN-only and partial: send only what
+  // changed, then re-read so the page shows what the server actually stored.
+  const saveEdit = async () => {
+    setSaving(true);
+    setSaveError('');
+    try {
+      const patch = {};
+      if (editForm.courseName && editForm.courseName !== course.courseName) patch.courseName = editForm.courseName;
+      if (editForm.tuitionFee !== '') patch.tuitionFee = String(editForm.tuitionFee);
+      if (editForm.currency) patch.currency = editForm.currency;
+      if (editForm.courseDuration !== '') patch.courseDuration = Number(editForm.courseDuration);
+      if (editForm.applicationDeadline) patch.applicationDeadline = editForm.applicationDeadline;
+
+      if (Object.keys(patch).length === 0) { setShowEdit(false); return; }
+
+      await courseService.update(id, patch);
+      setShowEdit(false);
+      await load();
+    } catch (err) {
+      console.error('Failed to update course:', err);
+      setSaveError(err.message || 'Failed to update this course.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) {
@@ -375,29 +408,61 @@ const CourseDetails = () => {
         ))}
       </Modal>
 
-      {/* Local-only edit */}
+      {/* Course edit - PATCH /crm/courses/{id}, ADMIN only */}
       <Modal
         isOpen={showEdit}
-        onClose={() => setShowEdit(false)}
+        onClose={() => { setShowEdit(false); setSaveError(''); }}
         title="Edit Course"
         size="small"
         footer={(
           <>
-            <Button variant="ghost" onClick={() => setShowEdit(false)}>Cancel</Button>
-            <Button onClick={saveEdit}>Apply</Button>
+            <Button variant="ghost" onClick={() => { setShowEdit(false); setSaveError(''); }}>Cancel</Button>
+            <Button onClick={saveEdit} disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
           </>
         )}
       >
-        <Alert variant="warning">
-          The backend has no endpoint for updating a course yet, so changes here apply to this
-          screen only and are lost on refresh.
-        </Alert>
+        <Alert variant="error" onDismiss={() => setSaveError('')}>{saveError}</Alert>
+        <Alert variant="info">Updating a course requires an ADMIN role.</Alert>
         <Input
           label="Course Name"
           name="courseName"
           value={editForm.courseName}
           onChange={(e) => setEditForm({ ...editForm, courseName: e.target.value })}
         />
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+          <Input
+            label="Tuition Fee"
+            name="tuitionFee"
+            value={editForm.tuitionFee}
+            onChange={(e) => setEditForm({ ...editForm, tuitionFee: e.target.value })}
+          />
+          <Input
+            label="Currency"
+            name="currency"
+            value={editForm.currency}
+            onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })}
+          />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <Input
+            label="Duration (months)"
+            name="courseDuration"
+            type="number"
+            value={editForm.courseDuration}
+            onChange={(e) => setEditForm({ ...editForm, courseDuration: e.target.value })}
+          />
+          <Input
+            label="Application Deadline"
+            name="applicationDeadline"
+            type="date"
+            value={editForm.applicationDeadline}
+            onChange={(e) => setEditForm({ ...editForm, applicationDeadline: e.target.value })}
+          />
+        </div>
+        <p style={{ margin: '-4px 0 0', fontSize: '12px', color: colors.textSecondary }}>
+          The application deadline is not returned by the API, so it cannot be shown here.
+          Leave a field blank to keep its current value.
+        </p>
       </Modal>
     </div>
   );

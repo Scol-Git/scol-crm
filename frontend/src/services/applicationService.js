@@ -1,7 +1,7 @@
 // Application Services - backed by the real CRM Applications endpoints.
-// Task/Report services below remain on mock data (no backend support yet).
-import { applications, tasks, monthlyStats, countryStats } from '../mockData/applications';
-import { leadProfiles } from '../mockData';
+// Task and Report services below are the last mock-backed services in the app;
+// the backend has no endpoints for either yet (see BACKEND-ISSUES.md).
+import { tasks, leadNames, applicationStatuses, monthlyStats, countryStats } from '../mockData';
 import { api, extractList } from './apiClient';
 
 const delay = (ms = 300) => new Promise(resolve => setTimeout(resolve, ms));
@@ -14,24 +14,55 @@ const toIntake = (intake) => {
   return { intakeMonth: d.getMonth() + 1, intakeYear: d.getFullYear() };
 };
 
-const normalizeApplication = (raw) => ({
-  id: raw.id ?? raw.applicationId,
-  leadId: raw.leadId ?? raw.lead?.id ?? null,
-  lead: raw.lead
-    ? { fullName: raw.lead.fullName ?? raw.lead.name, email: raw.lead.email, phone: raw.lead.phone, consultantName: raw.lead.consultantName }
-    : (raw.leadName ? { fullName: raw.leadName } : null),
-  university: raw.university
-    ? { uniName: raw.university.name ?? raw.university.uniName }
-    : (raw.universityName ? { uniName: raw.universityName } : null),
-  course: raw.course
-    ? { courseName: raw.course.name ?? raw.course.courseName }
-    : (raw.courseName ? { courseName: raw.courseName } : null),
-  status: raw.status ?? raw.applicationStatus ?? null,
-  stage: raw.stage ?? raw.applicationStage ?? null,
-  appliedDate: raw.appliedDate ?? raw.createdAt ?? null,
-  lastUpdated: raw.lastUpdated ?? raw.updatedAt ?? null,
-  _raw: raw,
-});
+// Two different shapes arrive here, both verified live:
+//   list  (CrmApplicationListItemDto): { id, leadInfo, universityCourseInfo,
+//          consultantInfo, applicationDate, applicationStatus, applicationStage,
+//          lastupdateDate }   <- note the lowercase 'u' in lastupdateDate
+//   detail (GetCrmApplicationDetailsResponseDto): { applicationId,
+//          applicationOverview: { universityInfo, courseInfo, currentStage,
+//          currentStatus, ... } }
+const normalizeApplication = (raw = {}) => {
+  const ov = raw.applicationOverview ?? null;
+
+  return {
+    id: raw.id ?? raw.applicationId ?? null,
+    serialNumber: raw.applicationSerialNumber ?? null,
+    leadId: raw.leadInfo?.leadId ?? raw.leadId ?? null,
+    lead: raw.leadInfo
+      ? {
+        fullName: raw.leadInfo.name,
+        email: raw.leadInfo.email,
+        phone: raw.leadInfo.phone,
+        consultantName: raw.consultantInfo?.name ?? null,
+      }
+      : null,
+    university: ov?.universityInfo
+      ? {
+        id: ov.universityInfo.universityId,
+        uniName: ov.universityInfo.universityName,
+        logoUrl: ov.universityInfo.universityLogoUrl,
+        coverImageUrl: ov.universityInfo.universityCoverImageUrl,
+      }
+      : (raw.universityCourseInfo
+        ? { id: raw.universityCourseInfo.UniCourseId, uniName: raw.universityCourseInfo.Uniname }
+        : null),
+    course: ov?.courseInfo
+      ? { id: ov.courseInfo.courseId, courseName: ov.courseInfo.courseName }
+      : (raw.universityCourseInfo ? { courseName: raw.universityCourseInfo.Coursename } : null),
+    intake: ov?.intakeInfo ?? null,
+    // Codes drive the badge maps; names are the server's display text.
+    status: ov?.currentStatus?.statusCode ?? raw.applicationStatus ?? null,
+    statusName: ov?.currentStatus?.statusName ?? null,
+    stage: ov?.currentStage?.stageCode ?? raw.applicationStage ?? null,
+    stageName: ov?.currentStage?.stageName ?? null,
+    stageInformation: ov?.currentStage?.stageInformation ?? null,
+    assignedTo: ov?.assignedTo ?? null,
+    appliedDate: ov?.appliedDate ?? raw.applicationDate ?? null,
+    lastUpdated: ov?.lastUpdatedAt ?? raw.lastupdateDate ?? null,
+    documentCheckLists: raw.documentCheckLists ?? [],
+    _raw: raw,
+  };
+};
 
 // Backend caps pagination.limit at 50 (CursorPaginationDto).
 const PAGE_LIMIT = 50;
@@ -66,17 +97,23 @@ export const applicationService = {
       pagination: { limit: limit ?? PAGE_LIMIT, ...(cursor ? { cursor } : {}) },
     });
     const { items, pagination } = extractList(data, ['applications']);
-    return { applications: items.map(normalizeApplication), pagination };
+    // The list endpoint also returns headline counts used by the stat cards.
+    return { applications: items.map(normalizeApplication), pagination, statistics: data?.statistics ?? null };
   },
 
   // Consultants (and whatever else the backend exposes) for the list filters.
   // Response is undocumented, so probe the likely key names.
+  // Live shape (verified): { consultantUsers: [{ userId, name }],
+  //   applicationStatuses: string[], applicationStages: string[] }
   async getDropdownData() {
-    const data = await api.get('/crm/applications/dropdown-data');
-    const raw = data ?? {};
+    const raw = (await api.get('/crm/applications/dropdown-data')) ?? {};
     return {
-      consultants: raw.consultants ?? raw.counselors ?? [],
-      universities: raw.universities ?? [],
+      consultants: (raw.consultantUsers ?? raw.consultants ?? []).map((c) => ({
+        id: c.userId ?? c.consultantId ?? c.id,
+        name: c.name,
+      })),
+      statuses: raw.applicationStatuses ?? [],
+      stages: raw.applicationStages ?? [],
       raw,
     };
   },
@@ -232,8 +269,7 @@ export const taskService = {
   async getAll() {
     await delay();
     return tasks.map(task => {
-      const lead = leadProfiles.find(l => l.id === task.leadId);
-      return { ...task, lead };
+      return { ...task, lead: { fullName: leadNames[task.leadId] ?? null } };
     });
   },
 
@@ -247,8 +283,7 @@ export const taskService = {
     return tasks
       .filter(task => task.status === 'pending' || task.status === 'in_progress')
       .map(task => {
-        const lead = leadProfiles.find(l => l.id === task.leadId);
-        return { ...task, lead };
+        return { ...task, lead: { fullName: leadNames[task.leadId] ?? null } };
       })
       .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
   },
@@ -279,10 +314,10 @@ export const reportService = {
 
   async getSummary() {
     await delay();
-    const totalApplications = applications.length;
-    const accepted = applications.filter(a => ['Unconditional offer', 'Enrolled', 'VISA', 'Conditional offer'].includes(a.status)).length;
-    const enrolled = applications.filter(a => a.status === 'Enrolled').length;
-    const pending = applications.filter(a => ['Application Submitted', 'Pending Review', 'Interview', 'Payment', 'CAS/COE/120'].includes(a.status)).length;
+    const totalApplications = applicationStatuses.length;
+    const accepted = applicationStatuses.filter((st) => ['Unconditional offer', 'Enrolled', 'VISA', 'Conditional offer'].includes(st)).length;
+    const enrolled = applicationStatuses.filter((st) => st === 'Enrolled').length;
+    const pending = applicationStatuses.filter((st) => ['Application Submitted', 'Pending Review', 'Interview', 'Payment', 'CAS/COE/120'].includes(st)).length;
     const totalRevenue = monthlyStats.reduce((sum, m) => sum + m.revenue, 0);
 
     return {
