@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Globe, MapPin, Edit2, ExternalLink, Info, GraduationCap, CalendarRange } from 'lucide-react';
+import { ArrowLeft, Globe, MapPin, Edit2, ExternalLink, Info, GraduationCap, CalendarRange, Plus, Trash2 } from 'lucide-react';
 import { Card, Button, Badge, Modal, Input, Alert } from '../../components';
 import { crmUniversityService } from '../../services';
 import { colors } from '../../theme';
@@ -34,6 +34,10 @@ const UniversityDetails = () => {
   const [error, setError] = useState('');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [openMeta, setOpenMeta] = useState(null);
+  const [metaEditing, setMetaEditing] = useState(false);
+  const [metaDraft, setMetaDraft] = useState([]);
+  const [metaSaving, setMetaSaving] = useState(false);
+  const [metaSaveError, setMetaSaveError] = useState('');
 
   const [showEdit, setShowEdit] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -161,6 +165,55 @@ const UniversityDetails = () => {
     }
   };
 
+  // --- Ranking info (meta) ---------------------------------------------------
+  // meta[infoKey] is read-only display data; the same infoKey is also the field
+  // name PATCH /crm/universities/{uniId} expects (e.g. "rankingMetaData"), so
+  // save can stay generic instead of special-casing each info section.
+  const closeMeta = () => {
+    setOpenMeta(null);
+    setMetaEditing(false);
+    setMetaSaveError('');
+  };
+
+  const openMetaEditor = () => {
+    setMetaDraft((openMeta?.information ?? []).map((b) => ({
+      subtitle: b.subtitle ?? '',
+      description: (b.description ?? []).length ? [...b.description] : [''],
+    })));
+    setMetaSaveError('');
+    setMetaEditing(true);
+  };
+
+  const updateMetaBlock = (index, patch) => {
+    setMetaDraft((prev) => prev.map((b, i) => (i === index ? { ...b, ...patch } : b)));
+  };
+
+  const addMetaBlock = () => setMetaDraft((prev) => [...prev, { subtitle: '', description: [''] }]);
+
+  const removeMetaBlock = (index) => setMetaDraft((prev) => prev.filter((_, i) => i !== index));
+
+  const saveMeta = async () => {
+    if (!openMeta?.infoKey) return;
+    setMetaSaving(true);
+    setMetaSaveError('');
+    try {
+      const cleaned = metaDraft
+        .map((b) => ({
+          subtitle: (b.subtitle ?? '').trim(),
+          description: (b.description ?? []).map((d) => d.trim()).filter(Boolean),
+        }))
+        .filter((b) => b.subtitle || b.description.length);
+      await crmUniversityService.update(id, { [openMeta.infoKey]: cleaned });
+      closeMeta();
+      await load();
+    } catch (err) {
+      console.error('Failed to update ranking info:', err);
+      setMetaSaveError(err.message || 'Failed to update this info.');
+    } finally {
+      setMetaSaving(false);
+    }
+  };
+
   if (loading) {
     return <div style={{ textAlign: 'center', padding: '60px', color: colors.textSecondary }}>Loading university...</div>;
   }
@@ -245,7 +298,7 @@ const UniversityDetails = () => {
                     {university.meta?.[university.ranking.infoKey] && (
                       <button
                         type="button"
-                        onClick={() => setOpenMeta(university.meta[university.ranking.infoKey])}
+                        onClick={() => { setOpenMeta(university.meta[university.ranking.infoKey]); setMetaEditing(false); }}
                         style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: colors.brandPrimary, padding: 0, lineHeight: 0, marginLeft: '6px' }}
                         aria-label="Ranking details"
                       >
@@ -433,16 +486,65 @@ const UniversityDetails = () => {
         </div>
       </div>
 
-      {/* Meta tooltip */}
-      <Modal isOpen={!!openMeta} onClose={() => setOpenMeta(null)} title={openMeta?.title ?? ''} size="small">
-        {(openMeta?.information ?? []).map((block, i) => (
-          <div key={i} style={{ marginBottom: '16px' }}>
-            {block.subtitle && <h4 style={{ margin: '0 0 6px', fontSize: '14px', color: colors.textPrimary }}>{block.subtitle}</h4>}
-            {(block.description ?? []).map((d, j) => (
-              <p key={j} style={{ margin: '0 0 6px', color: colors.textSecondary, lineHeight: 1.6, fontSize: '14px' }}>{d}</p>
+      {/* Meta tooltip - editable in place via PATCH /crm/universities/{uniId} */}
+      <Modal
+        isOpen={!!openMeta}
+        onClose={closeMeta}
+        title={openMeta?.title ?? ''}
+        size="small"
+        footer={metaEditing ? (
+          <>
+            <Button variant="ghost" onClick={() => setMetaEditing(false)}>Cancel</Button>
+            <Button onClick={saveMeta} disabled={metaSaving}>{metaSaving ? 'Saving...' : 'Save'}</Button>
+          </>
+        ) : undefined}
+      >
+        <Alert variant="error" onDismiss={() => setMetaSaveError('')}>{metaSaveError}</Alert>
+
+        {metaEditing ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <Alert variant="info">Updating this requires an ADMIN role.</Alert>
+            {metaDraft.map((block, i) => (
+              <div key={i} style={{ border: `1px solid ${colors.borderLight}`, borderRadius: '8px', padding: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <Button variant="ghost" size="small" icon={Trash2} onClick={() => removeMetaBlock(i)} aria-label="Remove block" />
+                </div>
+                <Input
+                  label="Subtitle"
+                  value={block.subtitle}
+                  onChange={(e) => updateMetaBlock(i, { subtitle: e.target.value })}
+                />
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: colors.textSecondary }}>
+                  Description (one line per paragraph)
+                </label>
+                <textarea
+                  value={block.description.join('\n')}
+                  onChange={(e) => updateMetaBlock(i, { description: e.target.value.split('\n') })}
+                  style={{
+                    width: '100%', minHeight: '80px', padding: '8px 10px', borderRadius: '6px',
+                    border: `1px solid ${colors.borderLight}`, fontSize: '13px', fontFamily: 'inherit',
+                    resize: 'vertical', boxSizing: 'border-box',
+                  }}
+                />
+              </div>
             ))}
+            <Button variant="ghost" size="small" icon={Plus} onClick={addMetaBlock}>Add block</Button>
           </div>
-        ))}
+        ) : (
+          <>
+            {(openMeta?.information ?? []).map((block, i) => (
+              <div key={i} style={{ marginBottom: '16px' }}>
+                {block.subtitle && <h4 style={{ margin: '0 0 6px', fontSize: '14px', color: colors.textPrimary }}>{block.subtitle}</h4>}
+                {(block.description ?? []).map((d, j) => (
+                  <p key={j} style={{ margin: '0 0 6px', color: colors.textSecondary, lineHeight: 1.6, fontSize: '14px' }}>{d}</p>
+                ))}
+              </div>
+            ))}
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button variant="ghost" size="small" icon={Edit2} onClick={openMetaEditor}>Edit</Button>
+            </div>
+          </>
+        )}
       </Modal>
 
       {/* Stage flow — PUT /crm/universities/{uniId}/application-stage-flow.

@@ -32,32 +32,38 @@ const normalizeActivity = (raw = {}) => ({
   date: raw.occurredAt ?? null,
 });
 
-// document-progress returns { totalRequired, uploadedCount, progressBarItems:
-// [{ documentType: { documentTypeId, documentTypeCode, documentTypeName },
-//    order, overallStatus }] }  -- verified live.
-// A row is a *requirement* (the slot). Once a file exists it also has a
-// *document* id. The two have separate endpoints and separate status enums, so
-// both ids are kept.
-const normalizeDocumentRequirement = (raw = {}) => {
+// application detail's documentCheckLists returns [{ stageCode, stageName,
+// order, documentChecklistItems: [{ documentType: { documentTypeId,
+// documentTypeCode, documentTypeName }, isRequired, isMultipleAllowed,
+// overallStatus, allowedMimeTypes, maxFileSizeBytes, uploadedDocuments:
+// [{ applicationDocumentId, fileName, overallStatus }] }] }] -- verified live.
+// This is richer than the separate document-progress endpoint (which only has
+// documentType/order/overallStatus) - it's what carries isMultipleAllowed and
+// the per-file ids needed to download/verify/reject/delete an individual file.
+// A requirement can have zero, one, or (when isMultipleAllowed) several
+// uploaded files, each independently actionable.
+const normalizeDocumentRequirement = (raw = {}, stageCode, stageName) => {
   const dt = raw.documentType ?? {};
-  const documentTypeId = dt.documentTypeId ?? raw.documentTypeId ?? raw.id ?? null;
-  const document = raw.document ?? raw.latestDocument ?? raw.currentDocument ?? null;
-  const documentId = raw.documentId ?? document?.id ?? null;
+  const documentTypeId = dt.documentTypeId ?? null;
+  const uploadedDocuments = (raw.uploadedDocuments ?? []).map((d) => ({
+    id: d.applicationDocumentId,
+    fileName: d.fileName,
+    status: d.overallStatus,
+  }));
 
   return {
     documentTypeId,
-    documentId,
-    key: documentTypeId ?? documentId ?? raw.order,
-    label: dt.documentTypeName ?? raw.name ?? raw.label ?? 'Document',
+    key: documentTypeId,
+    stageCode,
+    stageName,
+    label: dt.documentTypeName ?? 'Document',
     code: dt.documentTypeCode ?? null,
-    order: raw.order ?? 0,
-    required: raw.isRequired ?? raw.required ?? true,
-    // Requirement-level status (server calls it overallStatus).
-    status: raw.overallStatus ?? raw.status ?? raw.requirementStatus ?? 'PENDING',
-    // Document-level status (adds REJECTED); only once a file exists.
-    documentStatus: raw.documentStatus ?? document?.status ?? null,
-    fileName: raw.fileName ?? document?.fileName ?? document?.name ?? null,
-    uploadedAt: raw.uploadedAt ?? document?.uploadedAt ?? document?.createdAt ?? null,
+    required: !!raw.isRequired,
+    isMultipleAllowed: !!raw.isMultipleAllowed,
+    status: raw.overallStatus ?? 'PENDING',
+    allowedMimeTypes: raw.allowedMimeTypes ?? null,
+    maxFileSizeBytes: raw.maxFileSizeBytes ?? null,
+    uploadedDocuments,
   };
 };
 
@@ -157,9 +163,8 @@ const ApplicationDetails = () => {
       }
       setLeadId(resolvedLeadId);
 
-      const [appData, documentProgress, activityList, noteList, progress, leadProfile] = await Promise.all([
+      const [appData, activityList, noteList, progress, leadProfile] = await Promise.all([
         applicationService.getById(resolvedLeadId, applicationId),
-        applicationService.getDocumentProgress(resolvedLeadId, applicationId).catch(() => []),
         applicationService.getActivities(resolvedLeadId, applicationId).catch(() => []),
         applicationService.getNotes(resolvedLeadId, applicationId).catch(() => []),
         applicationService.getStageProgress(resolvedLeadId, applicationId).catch(() => null),
@@ -180,9 +185,9 @@ const ApplicationDetails = () => {
           },
         }
         : appData);
-      setDocuments((Array.isArray(documentProgress)
-        ? documentProgress
-        : documentProgress?.progressBarItems ?? documentProgress?.items ?? []).map(normalizeDocumentRequirement));
+      setDocuments((appData.documentCheckLists ?? []).flatMap((stage) =>
+        (stage.documentChecklistItems ?? []).map((item) =>
+          normalizeDocumentRequirement(item, stage.stageCode, stage.stageName))));
       setActivities((Array.isArray(activityList) ? activityList : []).map(normalizeActivity));
       setNotes((Array.isArray(noteList) ? noteList : []).map(normalizeNote));
       setStageProgress(normalizeStageProgress(progress));
@@ -232,35 +237,26 @@ const ApplicationDetails = () => {
 
   // --- Documents -----------------------------------------------------------
 
-  const handleDocumentStatus = async (doc, toStatus) => {
-    if (!leadId) return;
-    // REJECTED only exists on the document (file) enum, so a reject must target
-    // an uploaded document; requirement slots use the shorter enum.
-    const useDocument = !!doc.documentId && (toStatus === 'REJECTED' || !!doc.documentStatus);
-    if (toStatus === 'REJECTED' && !doc.documentId) {
-      setActionError('Nothing has been uploaded for this requirement yet, so it cannot be rejected.');
-      return;
-    }
+  // Verify/Reject/Download/Delete all target a specific uploaded file now (a
+  // requirement can hold several when isMultipleAllowed is true), so each
+  // takes the uploadedDoc row alongside the parent requirement.
+  const docRowKey = (doc, uploadedDoc) => `${doc.key}-${uploadedDoc.id}`;
+
+  const handleDocumentStatus = async (doc, uploadedDoc, toStatus) => {
+    if (!leadId || !uploadedDoc) return;
 
     let remarks;
     if (toStatus === 'REJECTED') {
       remarks = window.prompt('Why is this document being rejected? (optional, max 500 chars)') ?? undefined;
     }
 
-    setDocBusyKey(doc.key);
+    setDocBusyKey(docRowKey(doc, uploadedDoc));
     setActionError('');
     try {
-      if (useDocument) {
-        await applicationService.changeDocumentStatus(leadId, applicationId, doc.documentId, {
-          toStatus,
-          remarks: remarks?.trim() || undefined,
-        });
-      } else {
-        await applicationService.changeRequirementStatus(leadId, applicationId, doc.documentTypeId, {
-          toStatus,
-          remarks: remarks?.trim() || undefined,
-        });
-      }
+      await applicationService.changeDocumentStatus(leadId, applicationId, uploadedDoc.id, {
+        toStatus,
+        remarks: remarks?.trim() || undefined,
+      });
       await loadApplication();
     } catch (err) {
       console.error('Failed to change document status:', err);
@@ -270,12 +266,12 @@ const ApplicationDetails = () => {
     }
   };
 
-  const handleDownload = async (doc) => {
-    if (!leadId || !doc.documentId) return;
-    setDocBusyKey(doc.key);
+  const handleDownload = async (doc, uploadedDoc) => {
+    if (!leadId || !uploadedDoc) return;
+    setDocBusyKey(docRowKey(doc, uploadedDoc));
     setActionError('');
     try {
-      const res = await applicationService.getDocumentDownload(leadId, applicationId, doc.documentId);
+      const res = await applicationService.getDocumentDownload(leadId, applicationId, uploadedDoc.id);
       const url = typeof res === 'string' ? res : res?.downloadUrl ?? res?.url ?? res?.signedUrl;
       if (!url) throw new Error('The server did not return a download link.');
       window.open(url, '_blank', 'noopener');
@@ -287,19 +283,46 @@ const ApplicationDetails = () => {
     }
   };
 
-  const handleUpload = async (doc, file) => {
-    if (!leadId || !file || !doc.documentTypeId) return;
-    setDocBusyKey(doc.key);
+  // Delete is verified live: DELETE /applications/{applicationId}/documents/{documentId}
+  // - intentionally NOT /crm-prefixed and has no leadId in the path, unlike
+  // every other call in applicationService.js. Do not "fix" this to match.
+  const handleDeleteDocument = async (doc, uploadedDoc) => {
+    if (!window.confirm(`Delete "${uploadedDoc.fileName ?? 'this document'}"? This cannot be undone.`)) return;
+    setDocBusyKey(docRowKey(doc, uploadedDoc));
     setActionError('');
     try {
-      await applicationService.uploadDocument(leadId, applicationId, doc.documentTypeId, file);
+      await applicationService.deleteDocument(applicationId, uploadedDoc.id);
       await loadApplication();
     } catch (err) {
-      console.error('Failed to upload document:', err);
-      setActionError(err.message || 'Failed to upload the document.');
+      console.error('Failed to delete document:', err);
+      setActionError(err.message || 'Failed to delete the document.');
     } finally {
       setDocBusyKey(null);
     }
+  };
+
+  // Uploads one requirement's files sequentially - avoids racing multiple PUTs
+  // against the same presigned-URL flow and keeps failures attributable per file.
+  const handleUpload = async (doc, files) => {
+    if (!leadId || !files?.length || !doc.documentTypeId) return;
+    setDocBusyKey(doc.key);
+    setActionError('');
+    const failed = [];
+    for (const file of files) {
+      if (doc.maxFileSizeBytes && file.size > doc.maxFileSizeBytes) {
+        failed.push(`${file.name} (too large)`);
+        continue;
+      }
+      try {
+        await applicationService.uploadDocument(leadId, applicationId, doc.documentTypeId, file);
+      } catch (err) {
+        console.error('Failed to upload document:', err);
+        failed.push(file.name);
+      }
+    }
+    if (failed.length) setActionError(`Failed to upload: ${failed.join(', ')}`);
+    await loadApplication();
+    setDocBusyKey(null);
   };
 
   // --- Notes ---------------------------------------------------------------
@@ -589,63 +612,42 @@ const ApplicationDetails = () => {
           {/* Documents */}
           <Card title="Documents">
             {documents.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {documents.map((doc) => {
-                  const effectiveStatus = doc.documentStatus ?? doc.status;
-                  const busy = docBusyKey === doc.key;
-                  const hasFile = !!doc.documentId;
+                  const requirementBusy = docBusyKey === doc.key;
+                  // Once a single-file requirement has its one file, hide the
+                  // upload control - a new file has to replace it via Delete
+                  // first. Multi-file requirements can always add more.
+                  const canUploadMore = doc.isMultipleAllowed || doc.uploadedDocuments.length === 0;
 
                   return (
                     <div
                       key={doc.key}
                       style={{
+                        padding: '12px 16px',
+                        backgroundColor: colors.appBg,
+                        borderRadius: '8px',
+                        opacity: requirementBusy ? 0.6 : 1,
+                      }}
+                    >
+                      <div style={{
                         display: 'flex',
                         flexDirection: isMobile ? 'column' : 'row',
                         alignItems: isMobile ? 'stretch' : 'center',
                         justifyContent: 'space-between',
                         gap: '12px',
-                        padding: '12px 16px',
-                        backgroundColor: colors.appBg,
-                        borderRadius: '8px',
-                        opacity: busy ? 0.6 : 1,
                       }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-                        {effectiveStatus === 'VERIFIED' ? (
-                          <CheckCircle size={18} color={colors.success} style={{ flexShrink: 0 }} />
-                        ) : (
-                          <AlertCircle
-                            size={18}
-                            color={effectiveStatus === 'REJECTED' ? colors.error : (doc.required ? colors.warning : colors.textMuted)}
-                            style={{ flexShrink: 0 }}
-                          />
-                        )}
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ color: colors.textPrimary }}>{doc.label}</span>
-                            {doc.required && <Badge variant="warning" size="small">Required</Badge>}
-                          </div>
-                          {doc.fileName && (
-                            <div style={{ fontSize: '12px', color: colors.textSecondary, marginTop: '2px' }}>
-                              {doc.fileName}
-                            </div>
-                          )}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: 0 }}>
+                          <span style={{ color: colors.textPrimary }}>{doc.label}</span>
+                          {doc.required && <Badge variant="warning" size="small">Required</Badge>}
+                          {doc.isMultipleAllowed && <Badge size="small">Multiple allowed</Badge>}
+                          <Badge variant={documentStatusVariant(doc.status)}>
+                            {doc.status?.replace(/_/g, ' ') || 'Pending'}
+                          </Badge>
                         </div>
-                      </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flexShrink: 0 }}>
-                        <Badge variant={documentStatusVariant(effectiveStatus)}>
-                          {effectiveStatus?.replace(/_/g, ' ') || 'Pending'}
-                        </Badge>
-
-                        {hasFile && (
-                          <Button variant="ghost" size="small" icon={Download} disabled={busy} onClick={() => handleDownload(doc)}>
-                            Download
-                          </Button>
-                        )}
-
-                        {/* Upload / replace - presigned 3-step flow */}
-                        {doc.documentTypeId && (
+                        {doc.documentTypeId && canUploadMore && (
                           <label
                             style={{
                               display: 'inline-flex',
@@ -653,39 +655,91 @@ const ApplicationDetails = () => {
                               gap: '6px',
                               fontSize: '13px',
                               color: colors.textSecondary,
-                              cursor: busy ? 'default' : 'pointer',
+                              cursor: requirementBusy ? 'default' : 'pointer',
                               padding: '4px 8px',
+                              flexShrink: 0,
                             }}
                           >
                             <Upload size={14} />
-                            {hasFile ? 'Replace' : 'Upload'}
+                            {doc.uploadedDocuments.length > 0 ? 'Add file' : 'Upload'}
                             <input
                               type="file"
-                              disabled={busy}
+                              multiple={doc.isMultipleAllowed}
+                              accept={doc.allowedMimeTypes ?? undefined}
+                              disabled={requirementBusy}
                               style={{ display: 'none' }}
                               onChange={(e) => {
-                                const file = e.target.files?.[0];
+                                const files = Array.from(e.target.files ?? []);
                                 e.target.value = '';
-                                if (file) handleUpload(doc, file);
+                                if (files.length) handleUpload(doc, files);
                               }}
                             />
                           </label>
                         )}
-
-                        {/* A requirement with no uploaded file cannot be
-                            verified - the backend returns 400 "Requirement
-                            cannot be marked as verified". */}
-                        {hasFile && effectiveStatus !== 'VERIFIED' && (
-                          <Button variant="ghost" size="small" disabled={busy} onClick={() => handleDocumentStatus(doc, 'VERIFIED')}>
-                            Verify
-                          </Button>
-                        )}
-                        {hasFile && effectiveStatus !== 'REJECTED' && (
-                          <Button variant="ghost" size="small" disabled={busy} onClick={() => handleDocumentStatus(doc, 'REJECTED')}>
-                            Reject
-                          </Button>
-                        )}
                       </div>
+
+                      {doc.uploadedDocuments.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+                          {doc.uploadedDocuments.map((uploadedDoc) => {
+                            const fileBusy = docBusyKey === docRowKey(doc, uploadedDoc);
+                            return (
+                              <div
+                                key={uploadedDoc.id}
+                                style={{
+                                  display: 'flex',
+                                  flexDirection: isMobile ? 'column' : 'row',
+                                  alignItems: isMobile ? 'stretch' : 'center',
+                                  justifyContent: 'space-between',
+                                  gap: '10px',
+                                  padding: '8px 12px',
+                                  backgroundColor: colors.contentSurface,
+                                  borderRadius: '6px',
+                                  opacity: fileBusy ? 0.6 : 1,
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                                  {uploadedDoc.status === 'VERIFIED' ? (
+                                    <CheckCircle size={16} color={colors.success} style={{ flexShrink: 0 }} />
+                                  ) : (
+                                    <AlertCircle
+                                      size={16}
+                                      color={uploadedDoc.status === 'REJECTED' ? colors.error : colors.textMuted}
+                                      style={{ flexShrink: 0 }}
+                                    />
+                                  )}
+                                  <span style={{ fontSize: '13px', color: colors.textPrimary, wordBreak: 'break-word' }}>
+                                    {uploadedDoc.fileName || 'Untitled file'}
+                                  </span>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', flexShrink: 0 }}>
+                                  <Badge variant={documentStatusVariant(uploadedDoc.status)} size="small">
+                                    {uploadedDoc.status?.replace(/_/g, ' ') || 'Pending'}
+                                  </Badge>
+                                  <Button variant="ghost" size="small" icon={Download} disabled={fileBusy} onClick={() => handleDownload(doc, uploadedDoc)}>
+                                    Download
+                                  </Button>
+                                  {uploadedDoc.status !== 'VERIFIED' && (
+                                    <Button variant="ghost" size="small" disabled={fileBusy} onClick={() => handleDocumentStatus(doc, uploadedDoc, 'VERIFIED')}>
+                                      Verify
+                                    </Button>
+                                  )}
+                                  {uploadedDoc.status !== 'REJECTED' && (
+                                    <Button variant="ghost" size="small" disabled={fileBusy} onClick={() => handleDocumentStatus(doc, uploadedDoc, 'REJECTED')}>
+                                      Reject
+                                    </Button>
+                                  )}
+                                  <Button variant="ghost" size="small" icon={Trash2} disabled={fileBusy} onClick={() => handleDeleteDocument(doc, uploadedDoc)}>
+                                    Delete
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p style={{ margin: '10px 0 0', fontSize: '12px', color: colors.textSecondary }}>No file uploaded yet.</p>
+                      )}
                     </div>
                   );
                 })}

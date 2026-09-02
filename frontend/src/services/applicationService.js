@@ -189,6 +189,13 @@ export const applicationService = {
     return api.get(`/crm/leads/${leadId}/applications/${applicationId}/documents/${documentId}/download`);
   },
 
+  // Verified live: DELETE /applications/{applicationId}/documents/{documentId} -
+  // NOT /crm-prefixed, and no leadId in the path, unlike everything else in
+  // this file. Do not "fix" this to match the surrounding /crm/leads/... shape.
+  async deleteDocument(applicationId, documentId) {
+    return api.delete(`/applications/${applicationId}/documents/${documentId}`);
+  },
+
   async requestUploadUrl(leadId, applicationId, documentTypeId, { fileName, mimeType, fileSizeBytes }) {
     return api.post(
       `/crm/leads/${leadId}/applications/${applicationId}/document-types/${documentTypeId}/upload-url`,

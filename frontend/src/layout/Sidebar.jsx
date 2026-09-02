@@ -78,8 +78,8 @@ const Sidebar = ({ isOpen, isMobile, onClose }) => {
     { path: '/leads', label: 'Leads', icon: Users },
     { path: '/applications', label: 'Applications', icon: FileText },
     { path: '/courses', label: 'Courses', icon: GraduationCap },
-    { path: '/tasks', label: 'Tasks', icon: CheckSquare },
-    { path: '/reports', label: 'Reports', icon: BarChart3 },
+    { path: '/tasks', label: 'Tasks (demo)', icon: CheckSquare },
+    { path: '/reports', label: 'Reports (demo)', icon: BarChart3 },
     { path: '/settings', label: 'Settings', icon: Settings },
   ];
 

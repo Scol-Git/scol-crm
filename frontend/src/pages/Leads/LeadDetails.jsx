@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Edit2, Mail, Phone, MapPin, Calendar, GraduationCap, FileText } from 'lucide-react';
+import { ArrowLeft, Edit2, Mail, Phone, MapPin, Calendar, GraduationCap, FileText, Plus } from 'lucide-react';
 import { Card, Button, Badge, Modal, Input, Select, Alert } from '../../components';
-import { leadService, applicationService } from '../../services';
+import { leadService, applicationService, courseService, MONTHS } from '../../services';
 import {
   LEAD_STATUS,
   leadStatusVariant,
@@ -39,6 +39,16 @@ const LeadDetails = () => {
   const [saving, setSaving] = useState(false);
   const [applications, setApplications] = useState([]);
   const [applicationsLoading, setApplicationsLoading] = useState(true);
+  // New Application modal - POST /crm/leads/{leadId}/applications.
+  const [showNewAppModal, setShowNewAppModal] = useState(false);
+  const [courseQuery, setCourseQuery] = useState('');
+  const [courseResults, setCourseResults] = useState([]);
+  const [courseSearching, setCourseSearching] = useState(false);
+  const [selectedCourse, setSelectedCourse] = useState(null);
+  const [intakeMonth, setIntakeMonth] = useState('');
+  const [intakeYear, setIntakeYear] = useState('');
+  const [newAppSaving, setNewAppSaving] = useState(false);
+  const [newAppError, setNewAppError] = useState('');
   const [academicResults, setAcademicResults] = useState([]);
   const [englishTestResults, setEnglishTestResults] = useState([]);
   const [sharedDocuments, setSharedDocuments] = useState([]);
@@ -171,6 +181,64 @@ const LeadDetails = () => {
       setApplications([]);
     } finally {
       setApplicationsLoading(false);
+    }
+  };
+
+  // --- New Application -------------------------------------------------------
+  useEffect(() => {
+    if (!showNewAppModal || !courseQuery.trim() || selectedCourse) { setCourseResults([]); return undefined; }
+    const timer = setTimeout(async () => {
+      setCourseSearching(true);
+      try {
+        const { courses } = await courseService.search({ searchText: courseQuery });
+        setCourseResults(courses);
+      } catch (err) {
+        console.error('Failed to search courses:', err);
+        setCourseResults([]);
+      } finally {
+        setCourseSearching(false);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [courseQuery, showNewAppModal, selectedCourse]);
+
+  const resetNewAppForm = () => {
+    setCourseQuery('');
+    setCourseResults([]);
+    setSelectedCourse(null);
+    setIntakeMonth('');
+    setIntakeYear('');
+    setNewAppError('');
+  };
+
+  const selectCourseForApplication = (course) => {
+    setSelectedCourse(course);
+    setCourseResults([]);
+    setCourseQuery(`${course.name} — ${course.university?.name ?? 'Unknown university'}`);
+  };
+
+  const handleCreateApplication = async () => {
+    if (!selectedCourse?.university?.id || !selectedCourse?.id || !intakeMonth || !intakeYear) {
+      setNewAppError('Select a course and intake month/year.');
+      return;
+    }
+    setNewAppSaving(true);
+    setNewAppError('');
+    try {
+      await applicationService.create(id, {
+        universityId: selectedCourse.university.id,
+        courseId: selectedCourse.id,
+        intake: { intakeMonth: Number(intakeMonth), intakeYear: Number(intakeYear) },
+      });
+      setShowNewAppModal(false);
+      resetNewAppForm();
+      // The create response is {success:true} only (no echoed id), so re-fetch.
+      await loadApplications();
+    } catch (err) {
+      console.error('Failed to create application:', err);
+      setNewAppError(err.message || 'Failed to create the application.');
+    } finally {
+      setNewAppSaving(false);
     }
   };
 
@@ -760,7 +828,14 @@ const LeadDetails = () => {
           </Card>
         )}
         {/* This lead's applications - GET /crm/leads/{leadId}/applications */}
-        <Card title="Applications">
+        <Card
+          title="Applications"
+          headerAction={(
+            <Button variant="ghost" size="small" icon={Plus} onClick={() => { resetNewAppForm(); setShowNewAppModal(true); }}>
+              New Application
+            </Button>
+          )}
+        >
           {applicationsLoading ? (
             <div style={{ textAlign: 'center', padding: '24px', color: colors.textSecondary }}>
               Loading applications...
@@ -820,6 +895,87 @@ const LeadDetails = () => {
           )}
         </Card>
       </div>
+
+      {/* New Application - POST /crm/leads/{leadId}/applications */}
+      <Modal
+        isOpen={showNewAppModal}
+        onClose={() => { setShowNewAppModal(false); resetNewAppForm(); }}
+        title="New Application"
+        size="medium"
+        footer={(
+          <>
+            <Button variant="ghost" onClick={() => { setShowNewAppModal(false); resetNewAppForm(); }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateApplication}
+              disabled={newAppSaving || !selectedCourse || !intakeMonth || !intakeYear}
+            >
+              {newAppSaving ? 'Creating...' : 'Create Application'}
+            </Button>
+          </>
+        )}
+      >
+        <Alert variant="error" onDismiss={() => setNewAppError('')}>{newAppError}</Alert>
+
+        <Input
+          label="Course"
+          placeholder="Search by course or university name..."
+          value={courseQuery}
+          onChange={(e) => { setCourseQuery(e.target.value); setSelectedCourse(null); }}
+        />
+
+        {courseSearching && (
+          <div style={{ fontSize: '13px', color: colors.textSecondary, marginTop: '-8px', marginBottom: '12px' }}>
+            Searching...
+          </div>
+        )}
+
+        {courseResults.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+            {courseResults.map((course) => (
+              <button
+                key={course.id}
+                type="button"
+                onClick={() => selectCourseForApplication(course)}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                  width: '100%', padding: '10px 14px', backgroundColor: colors.appBg,
+                  border: `1px solid ${colors.borderLight}`, borderRadius: '8px',
+                  cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
+                }}
+              >
+                <span style={{ fontWeight: '500', color: colors.textPrimary, fontSize: '14px' }}>{course.name}</span>
+                <span style={{ fontSize: '12px', color: colors.textSecondary }}>{course.university?.name || 'Unknown university'}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {selectedCourse && (
+          <>
+            <Alert variant="info">
+              Selected: <strong>{selectedCourse.name}</strong> at {selectedCourse.university?.name}
+            </Alert>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <Select
+                label="Intake Month"
+                value={intakeMonth}
+                onChange={(e) => setIntakeMonth(e.target.value)}
+                options={MONTHS.map((m) => ({ value: String(m.value), label: m.label }))}
+                placeholder="Select month"
+              />
+              <Input
+                label="Intake Year"
+                type="number"
+                value={intakeYear}
+                onChange={(e) => setIntakeYear(e.target.value)}
+                placeholder="e.g. 2026"
+              />
+            </div>
+          </>
+        )}
+      </Modal>
 
       {/* Academic result editor - PUT /crm/leads/{leadId}/academic-results.
           The degree list is fixed by the backend, so this fills in a slot

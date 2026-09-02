@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SlidersHorizontal, GraduationCap, MapPin, Clock, Wallet, Award } from 'lucide-react';
 import { Card, Button, SearchInput, Alert, Badge, AdvancedSearchModal } from '../../components';
@@ -63,7 +63,7 @@ const CourseList = () => {
     return () => clearTimeout(timer);
   }, [load]);
 
-  const loadMore = async () => {
+  const loadMore = useCallback(async () => {
     if (!pageInfo.hasNext || !pageInfo.cursor) return;
     setLoadingMore(true);
     setError('');
@@ -77,7 +77,23 @@ const CourseList = () => {
     } finally {
       setLoadingMore(false);
     }
-  };
+  }, [fetchPage, pageInfo.hasNext, pageInfo.cursor]);
+
+  // Auto-load the next page when the sentinel below the grid scrolls into view.
+  const sentinelRef = useRef(null);
+  useEffect(() => {
+    if (!pageInfo.hasNext) return undefined;
+    const el = sentinelRef.current;
+    if (!el) return undefined;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !loadingMore && !loading) loadMore();
+      },
+      { rootMargin: '200px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [pageInfo.hasNext, loadingMore, loading, loadMore]);
 
   const openUniversity = (e, course) => {
     e.stopPropagation();
@@ -253,6 +269,8 @@ const CourseList = () => {
           ))}
         </div>
       )}
+
+      {pageInfo.hasNext && <div ref={sentinelRef} style={{ height: '1px' }} />}
 
       {pageInfo.hasNext && (
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: '24px' }}>
