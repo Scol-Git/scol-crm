@@ -81,13 +81,18 @@ const Applications = () => {
     }
   };
 
-  // --- New Application: step 1, search leads ---------------------------------
+  // --- New Application: step 1, search/browse leads ---------------------------
+  // searchText matching is unreliable on the backend (confirmed: a lead
+  // findable on the Leads page only via its creation-month filter, not text
+  // search) - so an empty query still fires, browsing the default/most-recent
+  // page of leads rather than leaving the user stuck with zero results.
   useEffect(() => {
-    if (!showNewAppModal || selectedLead || !leadQuery.trim()) { setLeadResults([]); return undefined; }
+    if (!showNewAppModal || selectedLead) { setLeadResults([]); return undefined; }
     const timer = setTimeout(async () => {
       setLeadSearching(true);
       try {
-        const { leads } = await leadService.getAll({ searchText: leadQuery });
+        const trimmed = leadQuery.trim();
+        const { leads } = await leadService.getAll(trimmed ? { searchText: trimmed } : {});
         setLeadResults(leads);
       } catch (err) {
         console.error('Failed to search leads:', err);
@@ -815,7 +820,7 @@ const Applications = () => {
           <>
             <Input
               label="Lead"
-              placeholder="Search by name, email, or phone..."
+              placeholder="Search by name, email, or phone, or leave blank to browse recent leads..."
               value={leadQuery}
               onChange={(e) => setLeadQuery(e.target.value)}
             />
@@ -824,8 +829,13 @@ const Applications = () => {
                 Searching...
               </div>
             )}
+            {!leadSearching && leadResults.length === 0 && (
+              <div style={{ fontSize: '13px', color: colors.textSecondary, marginTop: '-8px', marginBottom: '12px' }}>
+                No leads found. Search text matching can miss some leads - try a shorter query or leave it blank to browse.
+              </div>
+            )}
             {leadResults.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px', maxHeight: '260px', overflowY: 'auto' }}>
                 {leadResults.map((lead) => (
                   <button
                     key={lead.id}
@@ -875,7 +885,7 @@ const Applications = () => {
                 </div>
               )}
               {courseResults.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px', maxHeight: '260px', overflowY: 'auto' }}>
                   {courseResults.map((course) => (
                     <button
                       key={course.id}
