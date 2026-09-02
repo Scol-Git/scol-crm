@@ -7,10 +7,11 @@ import {
   XCircle,
   AlertCircle,
   Eye,
-  GraduationCap
+  GraduationCap,
+  Plus,
 } from 'lucide-react';
 import { Card, Table, Badge, SearchInput, Button, Select, Modal, Input, Alert } from '../../components';
-import { applicationService } from '../../services';
+import { applicationService, leadService, courseService, MONTHS } from '../../services';
 import { buildApplicationQuery } from '../../services/applicationService';
 import {
   APPLICATION_STATUS,
@@ -44,6 +45,22 @@ const Applications = () => {
   const [savingAction, setSavingAction] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
+  // New Application modal - POST /crm/leads/{leadId}/applications. This list
+  // isn't scoped to one lead, so creating one here means picking a lead first.
+  const [showNewAppModal, setShowNewAppModal] = useState(false);
+  const [leadQuery, setLeadQuery] = useState('');
+  const [leadResults, setLeadResults] = useState([]);
+  const [leadSearching, setLeadSearching] = useState(false);
+  const [selectedLead, setSelectedLead] = useState(null);
+  const [courseQuery, setCourseQuery] = useState('');
+  const [courseResults, setCourseResults] = useState([]);
+  const [courseSearching, setCourseSearching] = useState(false);
+  const [selectedCourse, setSelectedCourse] = useState(null);
+  const [intakeMonth, setIntakeMonth] = useState('');
+  const [intakeYear, setIntakeYear] = useState('');
+  const [newAppSaving, setNewAppSaving] = useState(false);
+  const [newAppError, setNewAppError] = useState('');
+
   useEffect(() => {
     loadDropdownData();
 
@@ -61,6 +78,91 @@ const Applications = () => {
     } catch (err) {
       // Non-fatal: the consultant filter just stays empty.
       console.error('Failed to load application dropdown data:', err);
+    }
+  };
+
+  // --- New Application: step 1, search leads ---------------------------------
+  useEffect(() => {
+    if (!showNewAppModal || selectedLead || !leadQuery.trim()) { setLeadResults([]); return undefined; }
+    const timer = setTimeout(async () => {
+      setLeadSearching(true);
+      try {
+        const { leads } = await leadService.getAll({ searchText: leadQuery });
+        setLeadResults(leads);
+      } catch (err) {
+        console.error('Failed to search leads:', err);
+        setLeadResults([]);
+      } finally {
+        setLeadSearching(false);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [leadQuery, showNewAppModal, selectedLead]);
+
+  // --- New Application: step 2, search courses --------------------------------
+  useEffect(() => {
+    if (!showNewAppModal || !selectedLead || selectedCourse || !courseQuery.trim()) { setCourseResults([]); return undefined; }
+    const timer = setTimeout(async () => {
+      setCourseSearching(true);
+      try {
+        const { courses } = await courseService.search({ searchText: courseQuery });
+        setCourseResults(courses);
+      } catch (err) {
+        console.error('Failed to search courses:', err);
+        setCourseResults([]);
+      } finally {
+        setCourseSearching(false);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [courseQuery, showNewAppModal, selectedLead, selectedCourse]);
+
+  const resetNewAppForm = () => {
+    setLeadQuery('');
+    setLeadResults([]);
+    setSelectedLead(null);
+    setCourseQuery('');
+    setCourseResults([]);
+    setSelectedCourse(null);
+    setIntakeMonth('');
+    setIntakeYear('');
+    setNewAppError('');
+  };
+
+  const selectLeadForApplication = (lead) => {
+    setSelectedLead(lead);
+    setLeadResults([]);
+    setLeadQuery(lead.fullName || lead.email || lead.phone || '');
+  };
+
+  const selectCourseForApplication = (course) => {
+    setSelectedCourse(course);
+    setCourseResults([]);
+    setCourseQuery(`${course.name} — ${course.university?.name ?? 'Unknown university'}`);
+  };
+
+  const handleCreateApplication = async () => {
+    if (!selectedLead?.id || !selectedCourse?.university?.id || !selectedCourse?.id || !intakeMonth || !intakeYear) {
+      setNewAppError('Select a lead, a course, and an intake month/year.');
+      return;
+    }
+    setNewAppSaving(true);
+    setNewAppError('');
+    try {
+      await applicationService.create(selectedLead.id, {
+        universityId: selectedCourse.university.id,
+        courseId: selectedCourse.id,
+        intake: { intakeMonth: Number(intakeMonth), intakeYear: Number(intakeYear) },
+      });
+      setShowNewAppModal(false);
+      resetNewAppForm();
+      // The create response is {success:true} only (no echoed id), so re-fetch.
+      await loadApplications();
+    } catch (err) {
+      console.error('Failed to create application:', err);
+      setNewAppError(err.message || 'Failed to create the application.');
+    } finally {
+      setNewAppSaving(false);
     }
   };
 
@@ -511,8 +613,21 @@ const Applications = () => {
             </div>
           </div>
         </div>
-        <div style={{ color: colors.textSecondary, fontSize: '14px', textAlign: isMobile ? 'center' : 'right' }}>
-          {applications.length} application(s){pageInfo.hasNext ? ' so far' : ''}
+        <div style={{
+          display: 'flex', flexDirection: 'column', gap: '8px',
+          alignItems: isMobile ? 'stretch' : 'flex-end',
+        }}
+        >
+          <Button
+            icon={Plus}
+            onClick={() => { resetNewAppForm(); setShowNewAppModal(true); }}
+            style={{ width: isMobile ? '100%' : 'auto' }}
+          >
+            New Application
+          </Button>
+          <div style={{ color: colors.textSecondary, fontSize: '14px', textAlign: isMobile ? 'center' : 'right' }}>
+            {applications.length} application(s){pageInfo.hasNext ? ' so far' : ''}
+          </div>
         </div>
       </div>
 
@@ -659,6 +774,149 @@ const Applications = () => {
             />
           </div>
         </div>
+      </Modal>
+
+      {/* New Application - POST /crm/leads/{leadId}/applications */}
+      <Modal
+        isOpen={showNewAppModal}
+        onClose={() => { setShowNewAppModal(false); resetNewAppForm(); }}
+        title="New Application"
+        size="medium"
+        footer={(
+          <>
+            <Button variant="ghost" onClick={() => { setShowNewAppModal(false); resetNewAppForm(); }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateApplication}
+              disabled={newAppSaving || !selectedLead || !selectedCourse || !intakeMonth || !intakeYear}
+            >
+              {newAppSaving ? 'Creating...' : 'Create Application'}
+            </Button>
+          </>
+        )}
+      >
+        <Alert variant="error" onDismiss={() => setNewAppError('')}>{newAppError}</Alert>
+
+        {/* Step 1: lead */}
+        {selectedLead ? (
+          <Alert variant="info">
+            Lead: <strong>{selectedLead.fullName || 'Unknown'}</strong> ({selectedLead.email || selectedLead.phone || 'no contact info'})
+            {' '}
+            <button
+              type="button"
+              onClick={() => { setSelectedLead(null); setLeadQuery(''); }}
+              style={{ border: 'none', background: 'transparent', color: colors.brandPrimary, cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit', fontSize: '13px' }}
+            >
+              Change
+            </button>
+          </Alert>
+        ) : (
+          <>
+            <Input
+              label="Lead"
+              placeholder="Search by name, email, or phone..."
+              value={leadQuery}
+              onChange={(e) => setLeadQuery(e.target.value)}
+            />
+            {leadSearching && (
+              <div style={{ fontSize: '13px', color: colors.textSecondary, marginTop: '-8px', marginBottom: '12px' }}>
+                Searching...
+              </div>
+            )}
+            {leadResults.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                {leadResults.map((lead) => (
+                  <button
+                    key={lead.id}
+                    type="button"
+                    onClick={() => selectLeadForApplication(lead)}
+                    style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                      width: '100%', padding: '10px 14px', backgroundColor: colors.appBg,
+                      border: `1px solid ${colors.borderLight}`, borderRadius: '8px',
+                      cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
+                    }}
+                  >
+                    <span style={{ fontWeight: '500', color: colors.textPrimary, fontSize: '14px' }}>{lead.fullName || 'Unknown'}</span>
+                    <span style={{ fontSize: '12px', color: colors.textSecondary }}>{lead.email || lead.phone || '-'}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Step 2: course - only once a lead is picked */}
+        {selectedLead && (
+          selectedCourse ? (
+            <Alert variant="info">
+              Course: <strong>{selectedCourse.name}</strong> at {selectedCourse.university?.name}
+              {' '}
+              <button
+                type="button"
+                onClick={() => { setSelectedCourse(null); setCourseQuery(''); }}
+                style={{ border: 'none', background: 'transparent', color: colors.brandPrimary, cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit', fontSize: '13px' }}
+              >
+                Change
+              </button>
+            </Alert>
+          ) : (
+            <>
+              <Input
+                label="Course"
+                placeholder="Search by course or university name..."
+                value={courseQuery}
+                onChange={(e) => setCourseQuery(e.target.value)}
+              />
+              {courseSearching && (
+                <div style={{ fontSize: '13px', color: colors.textSecondary, marginTop: '-8px', marginBottom: '12px' }}>
+                  Searching...
+                </div>
+              )}
+              {courseResults.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                  {courseResults.map((course) => (
+                    <button
+                      key={course.id}
+                      type="button"
+                      onClick={() => selectCourseForApplication(course)}
+                      style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                        width: '100%', padding: '10px 14px', backgroundColor: colors.appBg,
+                        border: `1px solid ${colors.borderLight}`, borderRadius: '8px',
+                        cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
+                      }}
+                    >
+                      <span style={{ fontWeight: '500', color: colors.textPrimary, fontSize: '14px' }}>{course.name}</span>
+                      <span style={{ fontSize: '12px', color: colors.textSecondary }}>{course.university?.name || 'Unknown university'}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )
+        )}
+
+        {/* Step 3: intake - only once lead and course are both picked */}
+        {selectedLead && selectedCourse && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <Select
+              label="Intake Month"
+              value={intakeMonth}
+              onChange={(e) => setIntakeMonth(e.target.value)}
+              options={MONTHS.map((m) => ({ value: String(m.value), label: m.label }))}
+              placeholder="Select month"
+            />
+            <Input
+              label="Intake Year"
+              type="number"
+              value={intakeYear}
+              onChange={(e) => setIntakeYear(e.target.value)}
+              placeholder="e.g. 2026"
+            />
+          </div>
+        )}
       </Modal>
     </div>
   );
