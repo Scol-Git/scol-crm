@@ -1,11 +1,11 @@
 // Thin fetch wrapper around the SCOL backend API.
 //
-// VITE_API_BASE_URL is inlined by Vite at BUILD time, not read at runtime. If
+// API_BASE_URL is inlined by Vite at BUILD time, not read at runtime. If
 // it's missing from the build environment (e.g. .env is gitignored and the host
 // has no env var set), every URL becomes "undefined/auth/login" - a relative
 // path that hits the SPA's own origin, gets caught by the catch-all rewrite,
 // and returns a baffling 405. Fail with a clear message instead.
-const RAW_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const RAW_BASE_URL = import.meta.env.API_BASE_URL;
 
 // Tolerate a trailing slash so "https://host/" + "/auth/login" isn't "//auth/login".
 const BASE_URL = typeof RAW_BASE_URL === 'string' ? RAW_BASE_URL.replace(/\/+$/, '') : RAW_BASE_URL;
@@ -13,7 +13,7 @@ const BASE_URL = typeof RAW_BASE_URL === 'string' ? RAW_BASE_URL.replace(/\/+$/,
 const BASE_URL_MISSING = !BASE_URL || BASE_URL === 'undefined';
 
 const CONFIG_ERROR =
-  'API base URL is not configured. VITE_API_BASE_URL was missing when this app was built, '
+  'API base URL is not configured. API_BASE_URL was missing when this app was built, '
   + 'so it cannot reach the backend. Set it in your hosting provider\'s environment variables '
   + '(Vercel: Settings → Environment Variables) and redeploy — Vite bakes this value in at '
   + 'build time, so changing it requires a new build.';

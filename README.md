@@ -13,7 +13,7 @@ React + Vite frontend for the SCOL CRM. Talks to the real SCOL backend API for a
 2. Configure the API base URL — copy `.env.example` to `.env` (already present, pointing at the QA backend):
 
    ```bash
-   VITE_API_BASE_URL=https://scol-backend-qa.vercel.app
+   API_BASE_URL=https://scol-backend-qa.vercel.app
    ```
 
 3. Start the development server:
@@ -37,7 +37,7 @@ React + Vite frontend for the SCOL CRM. Talks to the real SCOL backend API for a
 
 ## API Integration Status
 
-The backend's Swagger docs are at `{VITE_API_BASE_URL}/swagger`. It only exposes real endpoints for **auth**, **CRM Leads**, and **CRM Applications** — everything else in this app still runs on the mock data in `src/mockData/`.
+The backend's Swagger docs are at `{API_BASE_URL}/swagger`. It only exposes real endpoints for **auth**, **CRM Leads**, and **CRM Applications** — everything else in this app still runs on the mock data in `src/mockData/`.
 
 ### ✅ Connected to the real backend
 
@@ -83,7 +83,7 @@ frontend/
 │   ├── theme/
 │   ├── App.jsx
 │   └── main.jsx
-├── .env                   # VITE_API_BASE_URL (gitignored)
+├── .env                   # API_BASE_URL (gitignored)
 ├── .env.example
 ├── eslint.config.js
 ├── index.html
