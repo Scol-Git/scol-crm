@@ -51,6 +51,8 @@ const Applications = () => {
   const [leadQuery, setLeadQuery] = useState('');
   const [leadResults, setLeadResults] = useState([]);
   const [leadSearching, setLeadSearching] = useState(false);
+  const [leadPageInfo, setLeadPageInfo] = useState({ cursor: null, hasNext: false });
+  const [leadLoadingMore, setLeadLoadingMore] = useState(false);
   const [selectedLead, setSelectedLead] = useState(null);
   const [courseQuery, setCourseQuery] = useState('');
   const [courseResults, setCourseResults] = useState([]);
@@ -85,24 +87,47 @@ const Applications = () => {
   // searchText matching is unreliable on the backend (confirmed: a lead
   // findable on the Leads page only via its creation-month filter, not text
   // search) - so an empty query still fires, browsing the default/most-recent
-  // page of leads rather than leaving the user stuck with zero results.
+  // page of leads rather than leaving the user stuck with zero results. Leads
+  // created a while back won't be on that first page, so "Load more" pages
+  // through the rest via cursor - the only way to reach a lead from any date
+  // when the text search itself doesn't find it.
   useEffect(() => {
-    if (!showNewAppModal || selectedLead) { setLeadResults([]); return undefined; }
+    if (!showNewAppModal || selectedLead) { setLeadResults([]); setLeadPageInfo({ cursor: null, hasNext: false }); return undefined; }
     const timer = setTimeout(async () => {
       setLeadSearching(true);
       try {
         const trimmed = leadQuery.trim();
-        const { leads } = await leadService.getAll(trimmed ? { searchText: trimmed } : {});
+        const { leads, pagination } = await leadService.getAll(trimmed ? { searchText: trimmed } : {});
         setLeadResults(leads);
+        setLeadPageInfo({ cursor: pagination?.cursor ?? null, hasNext: !!pagination?.hasNext });
       } catch (err) {
         console.error('Failed to search leads:', err);
         setLeadResults([]);
+        setLeadPageInfo({ cursor: null, hasNext: false });
       } finally {
         setLeadSearching(false);
       }
     }, 350);
     return () => clearTimeout(timer);
   }, [leadQuery, showNewAppModal, selectedLead]);
+
+  const loadMoreLeads = async () => {
+    if (!leadPageInfo.hasNext || !leadPageInfo.cursor) return;
+    setLeadLoadingMore(true);
+    try {
+      const trimmed = leadQuery.trim();
+      const { leads, pagination } = await leadService.getAll({
+        ...(trimmed ? { searchText: trimmed } : {}),
+        cursor: leadPageInfo.cursor,
+      });
+      setLeadResults((prev) => [...prev, ...leads]);
+      setLeadPageInfo({ cursor: pagination?.cursor ?? null, hasNext: !!pagination?.hasNext });
+    } catch (err) {
+      console.error('Failed to load more leads:', err);
+    } finally {
+      setLeadLoadingMore(false);
+    }
+  };
 
   // --- New Application: step 2, search courses --------------------------------
   useEffect(() => {
@@ -132,11 +157,13 @@ const Applications = () => {
     setIntakeMonth('');
     setIntakeYear('');
     setNewAppError('');
+    setLeadPageInfo({ cursor: null, hasNext: false });
   };
 
   const selectLeadForApplication = (lead) => {
     setSelectedLead(lead);
     setLeadResults([]);
+    setLeadPageInfo({ cursor: null, hasNext: false });
     setLeadQuery(lead.fullName || lead.email || lead.phone || '');
   };
 
@@ -852,6 +879,13 @@ const Applications = () => {
                     <span style={{ fontSize: '12px', color: colors.textSecondary }}>{lead.email || lead.phone || '-'}</span>
                   </button>
                 ))}
+              </div>
+            )}
+            {leadPageInfo.hasNext && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+                <Button variant="ghost" size="small" onClick={loadMoreLeads} disabled={leadLoadingMore}>
+                  {leadLoadingMore ? 'Loading...' : 'Load more leads'}
+                </Button>
               </div>
             )}
           </>
