@@ -9,13 +9,17 @@ import {
   FileText,
   CheckSquare,
   BarChart3,
+  Building2,
+  FileUp,
   X,
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme';
 import logoWhite from '../assets/Logo/logo_white.png';
 
 const Sidebar = ({ isOpen, isMobile, onClose }) => {
   const location = useLocation();
+  const { isAdmin } = useAuth();
 
   const sidebarStyle = {
     width: '260px',
@@ -78,6 +82,11 @@ const Sidebar = ({ isOpen, isMobile, onClose }) => {
     { path: '/leads', label: 'Leads', icon: Users },
     { path: '/applications', label: 'Applications', icon: FileText },
     { path: '/courses', label: 'Courses', icon: GraduationCap },
+    { path: '/universities', label: 'Universities', icon: Building2 },
+    // CSV upload and draft publishing are ADMIN-only on the backend.
+    ...(isAdmin ? [
+      { path: '/bulk-imports', label: 'Bulk Imports', icon: FileUp },
+    ] : []),
     { path: '/tasks', label: 'Tasks (demo)', icon: CheckSquare },
     { path: '/reports', label: 'Reports (demo)', icon: BarChart3 },
     { path: '/settings', label: 'Settings', icon: Settings },

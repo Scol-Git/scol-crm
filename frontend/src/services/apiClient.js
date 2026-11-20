@@ -114,11 +114,13 @@ function endSession() {
 }
 
 class ApiError extends Error {
-  constructor(message, statusCode, code) {
+  constructor(message, statusCode, code, details) {
     super(message);
     this.name = 'ApiError';
     this.statusCode = statusCode;
     this.code = code;
+    // Field errors from a ValidationException (400): { field: ["msg"] }.
+    this.details = details ?? null;
     // Set for the "authenticated, but this user isn't a CRM consultant" case.
     this.noCrmAccess = false;
   }
@@ -147,10 +149,29 @@ function buildError(path, res, json) {
     return err;
   }
 
-  return new ApiError(raw, json?.statusCode ?? res.status, json?.error?.code);
+  return new ApiError(raw, json?.statusCode ?? res.status, json?.error?.code, json?.error?.details);
 }
 
-async function request(path, { method = 'GET', body, auth = true, token, headers = {}, _retried = false } = {}) {
+// "attachment; filename="course-template.csv"" -> "course-template.csv".
+// Only readable cross-origin when the backend exposes the header, so callers
+// must always have their own fallback name.
+function fileNameFromDisposition(header) {
+  if (!header) return null;
+  const encoded = header.match(/filename\*=(?:UTF-8'')?([^;]+)/i);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1].trim().replace(/^"|"$/g, ''));
+    } catch {
+      // fall through to the plain filename
+    }
+  }
+  const plain = header.match(/filename="?([^";]+)"?/i);
+  return plain ? plain[1].trim() : null;
+}
+
+// responseType 'blob' is for endpoints that return a file instead of the JSON
+// envelope (e.g. the bulk-import CSV templates). Errors still arrive as JSON.
+async function request(path, { method = 'GET', body, auth = true, token, headers = {}, responseType = 'json', _retried = false } = {}) {
   if (BASE_URL_MISSING) {
     throw new ApiError(CONFIG_ERROR, 0, 'MISSING_API_BASE_URL');
   }
@@ -167,7 +188,8 @@ async function request(path, { method = 'GET', body, auth = true, token, headers
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
-  const json = await res.json().catch(() => null);
+  const wantsBlob = responseType === 'blob' && res.ok;
+  const json = wantsBlob ? null : await res.json().catch(() => null);
 
   // Any 401 on an authenticated call means the session is gone. Try a silent
   // refresh when we have a refresh token; otherwise bounce to /login. Without
@@ -177,7 +199,7 @@ async function request(path, { method = 'GET', body, auth = true, token, headers
     if (tokenStorage.getRefreshToken()) {
       try {
         await refreshAccessToken();
-        return request(path, { method, body, auth, token, headers, _retried: true });
+        return request(path, { method, body, auth, token, headers, responseType, _retried: true });
       } catch {
         endSession();
         throw new ApiError('Session expired. Please log in again.', 401);
@@ -191,7 +213,54 @@ async function request(path, { method = 'GET', body, auth = true, token, headers
     throw buildError(path, res, json);
   }
 
+  if (wantsBlob) {
+    return {
+      blob: await res.blob(),
+      fileName: fileNameFromDisposition(res.headers.get('Content-Disposition')),
+    };
+  }
+
   return json?.data;
+}
+
+// { page: 1, search: '' } -> "?page=1". Empty values are dropped so optional
+// query params are simply not sent.
+export function buildQuery(params = {}) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === '') continue;
+    query.set(key, String(value));
+  }
+  const text = query.toString();
+  return text ? `?${text}` : '';
+}
+
+// PUT a file straight to a pre-signed storage URL (not our API, so no
+// Authorization header). fetch() cannot report upload progress, hence XHR.
+// The Content-Type must match what the URL was signed for; set it explicitly
+// because Windows reports .csv files as application/vnd.ms-excel.
+export function uploadFile(url, file, { contentType = 'text/csv', onProgress } = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    xhr.setRequestHeader('Content-Type', contentType);
+    xhr.upload.onprogress = (event) => {
+      if (onProgress && event.lengthComputable && event.total > 0) onProgress(event.loaded / event.total);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        if (onProgress) onProgress(1);
+        resolve();
+      } else {
+        reject(new ApiError(`Storage rejected the upload (status ${xhr.status}).`, xhr.status, 'UPLOAD_FAILED'));
+      }
+    };
+    // status 0: network failure, or the storage bucket's CORS rules do not
+    // allow this origin. The browser hides which one it was.
+    xhr.onerror = () => reject(new ApiError('The file could not be sent to storage (network or CORS error).', 0, 'UPLOAD_FAILED'));
+    xhr.onabort = () => reject(new ApiError('The upload was cancelled.', 0, 'UPLOAD_ABORTED'));
+    xhr.send(file);
+  });
 }
 
 // The backend doesn't document response bodies for the /crm/* list endpoints.
@@ -221,6 +290,8 @@ export function extractList(data, extraKeys = []) {
 
 export const api = {
   get: (path, opts) => request(path, { ...opts, method: 'GET' }),
+  // Resolves to { blob, fileName } for endpoints that return a file.
+  getBlob: (path, opts) => request(path, { ...opts, method: 'GET', responseType: 'blob' }),
   post: (path, body, opts) => request(path, { ...opts, method: 'POST', body }),
   put: (path, body, opts) => request(path, { ...opts, method: 'PUT', body }),
   patch: (path, body, opts) => request(path, { ...opts, method: 'PATCH', body }),
