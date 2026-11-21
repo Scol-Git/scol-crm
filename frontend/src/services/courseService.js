@@ -36,6 +36,7 @@ const normalizeCourse = (raw = {}) => ({
     imgUrl: raw.university?.imgUrl ?? null,
   },
   intake: raw.intake ? { name: raw.intake.name, year: raw.intake.year } : null,
+  programmeName: raw.programmeName ?? null,
   tuitionFee: raw.tuitionFee ?? null,
   currency: raw.currency ?? null,
   durationMonths: raw.durationMonths ?? null,
@@ -43,6 +44,8 @@ const normalizeCourse = (raw = {}) => ({
   applicationFee: raw.applicationFee ?? null,
   hasScholarship: !!raw.isScholarshipAvailable,
   engRequirements: raw.engRequirements ?? [],
+  // Optional on CourseResultDto; only an explicit `false` is a draft.
+  isPublished: raw.isPublished !== false,
   _raw: raw,
 });
 
@@ -94,13 +97,21 @@ export const buildCourseQuery = ({
 
 export const courseService = {
   // One endpoint covers both plain text and faceted search.
-  async search({ searchText, filters, ranges, flags, cursor, limit } = {}) {
+  //
+  // publishStatus ('PUBLISHED' | 'DRAFT' | 'ALL'), importBatchId and uniId are
+  // optional. Left out, the request is exactly what it was before drafts
+  // existed (published only). For counsellors the backend forces PUBLISHED and
+  // ignores importBatchId; uniId still applies.
+  async search({ searchText, filters, ranges, flags, cursor, limit, publishStatus, importBatchId, uniId } = {}) {
     const data = await api.post('/crm/search', {
       pagination: { limit: limit ?? PAGE_LIMIT, ...(cursor ? { cursor } : {}) },
       ...(searchText?.trim() ? { searchText: searchText.trim() } : {}),
       ...(filters ? { filters } : {}),
       ...(ranges ? { ranges } : {}),
       ...(flags ? { flags } : {}),
+      ...(publishStatus ? { publishStatus } : {}),
+      ...(importBatchId ? { importBatchId } : {}),
+      ...(uniId ? { uniId } : {}),
     });
     const { items, pagination } = extractList(data, ['courses']);
     return { courses: items.map(normalizeCourse), pagination };
@@ -117,12 +128,40 @@ export const courseService = {
       course: data?.courseDetails ?? null,
       // meta[] carries tooltip copy keyed by infoKey (rankingMetaData, …)
       meta: Object.fromEntries((data?.meta ?? []).map((m) => [m.infoKey, m])),
+      // { intakeIsPublished, courseIsPublished, universityIsPublished,
+      //   importBatchId } - null on a backend without draft/publish.
+      publish: data?.publish ?? null,
+      // CRM-only degree ids for the Academic Info editor.
+      edit: data?.edit ?? { minSysDegreeId: null, higherSysDegreeId: null },
     };
   },
 
   // Partial update — ADMIN only. Only send the fields being changed.
   async update(courseId, patch) {
     return api.patch(`/crm/courses/${courseId}`, patch);
+  },
+
+  // ADMIN only. Removes the draft intake plus its draft course data.
+  // 409 "Only never-published drafts can be deleted".
+  async deleteDraft(courseId) {
+    return api.delete(`/crm/courses/${courseId}`);
+  },
+
+  // All non-deleted programmes, including drafts, for the course editor.
+  async listProgrammes() {
+    const data = await api.get('/crm/lookups/programmes');
+    return data?.programmes ?? [];
+  },
+
+  // System academic degrees for the Academic Info degree dropdowns.
+  async getAcademicDegrees() {
+    const data = await api.get('/crm/lookups/academic-degrees');
+    return (data?.degrees ?? []).map((d) => ({
+      id: d.id,
+      name: d.degreeName,
+      levelOrder: d.levelOrder ?? null,
+      gpaScale: d.gpaScale != null ? Number(d.gpaScale) : null,
+    }));
   },
 
   async getFilterOptions() {

@@ -40,6 +40,7 @@ const MainLayout = () => {
     if (path.startsWith('/applications')) return 'Applications';
     if (path.startsWith('/universities')) return 'Universities';
     if (path.startsWith('/courses')) return 'Courses';
+    if (path.startsWith('/bulk-imports')) return 'Bulk Imports';
     if (path.startsWith('/tasks')) return 'Tasks';
     if (path.startsWith('/reports')) return 'Reports';
     if (path.startsWith('/settings')) return 'Settings';

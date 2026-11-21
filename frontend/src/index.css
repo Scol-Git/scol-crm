@@ -109,6 +109,20 @@ input, select, textarea {
   }
 }
 
+/* Indeterminate progress bar (ProgressBar.jsx): a 40%-wide bar sliding across */
+.progress-indeterminate {
+  animation: progress-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
 /* Focus styles */
 *:focus-visible {
   outline: 2px solid #8B2125;

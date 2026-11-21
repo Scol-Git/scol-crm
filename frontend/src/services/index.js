@@ -9,6 +9,7 @@ export { authService } from './authService';
 export { courseService, buildCourseQuery, MONTHS } from './courseService';
 export { crmUniversityService } from './crmUniversityService';
 export { crmDashboardService } from './crmDashboardService';
+export { bulkImportService } from './bulkImportService';
 
 
 // Shape from CrmLeadListItemDto, verified live. Consultant and target country
