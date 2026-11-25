@@ -11,6 +11,7 @@
     "test": "node --test test/unit-crm-fixes.test.mjs",
     "test:53": "node --test test/all-53-crm-tests.test.mjs",
     "test:live": "node test/audit-live-vercel-53.mjs",
+    "test:sweep": "node test/e2e-crm-complete-sweep.mjs",
     "test:api": "node --test test/verify-remote-api.mjs"
   },
   "dependencies": {
