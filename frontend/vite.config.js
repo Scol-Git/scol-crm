@@ -6,7 +6,8 @@ export default defineConfig({
   plugins: [react()],
   envPrefix: ['VITE_', 'API_'],
   server: {
-    port: 3000,
+    port: 5174,
+    strictPort: true,
     open: true
   }
 })

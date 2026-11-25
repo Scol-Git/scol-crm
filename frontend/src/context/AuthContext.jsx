@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../services/authService';
+import { isAdmin as userIsAdmin } from '../services/apiClient';
 
 const AuthContext = createContext(null);
 
@@ -52,6 +53,9 @@ export const AuthProvider = ({ children }) => {
     completeOtpVerification,
     logout,
     isAuthenticated: !!user,
+    // ADMIN can upload, publish, delete and edit; COUNSELLOR is read-only and
+    // never sees drafts. The backend enforces this too - this only drives the UI.
+    isAdmin: userIsAdmin(user),
     loading,
   };
 

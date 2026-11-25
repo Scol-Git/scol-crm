@@ -1,10 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { SlidersHorizontal, GraduationCap, MapPin, Clock, Wallet, Award } from 'lucide-react';
-import { Card, Button, SearchInput, Alert, Badge, AdvancedSearchModal } from '../../components';
+import {
+  Card, Button, SearchInput, Alert, Badge, AdvancedSearchModal, DraftBadge, SegmentedControl, FilterNotice,
+} from '../../components';
 import { ADVANCED_SEARCH_DEFAULTS } from '../../components/AdvancedSearchModal';
+import { useAuth } from '../../context';
 import { courseService, buildCourseQuery } from '../../services/courseService';
+import { PUBLISH_STATUS, isPublishStatus } from '../../services/mappers';
+import { useQueryParams } from '../../hooks/useQueryParams';
 import { colors } from '../../theme';
+
+// Draft/publish scope lives in the URL so other screens can link to it:
+//   /courses?publishStatus=DRAFT&importBatchId=<batchId>   drafts of one import
+//   /courses?uniId=<uniId>                                 one university's courses
+// With no params the request is exactly what it was before drafts existed
+// (published courses only).
 
 const money = (amount, currency) => {
   if (amount == null) return null;
@@ -15,6 +26,18 @@ const money = (amount, currency) => {
 
 const CourseList = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { isAdmin } = useAuth();
+  const [params, updateParams] = useQueryParams();
+
+  // Drafts are ADMIN-only. For a counsellor the backend forces PUBLISHED and
+  // ignores importBatchId, so neither is offered or sent; uniId works for all.
+  const publishStatus = isAdmin && isPublishStatus(params.get('publishStatus')) ? params.get('publishStatus') : 'PUBLISHED';
+  const importBatchId = isAdmin ? (params.get('importBatchId') ?? '') : '';
+  const uniId = params.get('uniId') ?? '';
+  // This exact view, so the pages opened from here can link back to it.
+  const here = `${location.pathname}${location.search}`;
+
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -34,26 +57,39 @@ const CourseList = () => {
   }, []);
 
   const fetchPage = useCallback(async (cursor) => {
+    const scope = {
+      // PUBLISHED is the backend default, so it is left out.
+      ...(publishStatus !== 'PUBLISHED' ? { publishStatus } : {}),
+      ...(importBatchId ? { importBatchId } : {}),
+      ...(uniId ? { uniId } : {}),
+    };
     if (advanced) {
-      return courseService.searchAdvanced({ ...buildCourseQuery(advanced), cursor });
+      return courseService.searchAdvanced({ ...buildCourseQuery(advanced), ...scope, cursor });
     }
-    return courseService.search({ searchText: searchQuery, cursor });
-  }, [advanced, searchQuery]);
+    return courseService.search({ searchText: searchQuery, ...scope, cursor });
+  }, [advanced, searchQuery, publishStatus, importBatchId, uniId]);
+
+  // Bumped by every new search. A response that is not for the latest search
+  // is dropped, so a slow "Published" answer cannot land under "Drafts".
+  const searchRef = useRef(0);
 
   const load = useCallback(async () => {
+    const searchId = ++searchRef.current;
     setLoading(true);
     setError('');
     try {
       const { courses: data, pagination } = await fetchPage(null);
+      if (searchId !== searchRef.current) return;
       setCourses(data);
       setPageInfo({ cursor: pagination?.cursor ?? null, hasNext: !!pagination?.hasNext });
     } catch (err) {
+      if (searchId !== searchRef.current) return;
       console.error('Failed to load courses:', err);
       setError(err.message || 'Failed to load courses.');
       setCourses([]);
       setPageInfo({ cursor: null, hasNext: false });
     } finally {
-      setLoading(false);
+      if (searchId === searchRef.current) setLoading(false);
     }
   }, [fetchPage]);
 
@@ -63,15 +99,25 @@ const CourseList = () => {
     return () => clearTimeout(timer);
   }, [load]);
 
+  // Switching scope replaces the whole result set, so hide the old cards right
+  // away instead of leaving them under the new selection until the debounce.
+  useEffect(() => {
+    setLoading(true);
+  }, [publishStatus, importBatchId, uniId]);
+
   const loadMore = useCallback(async () => {
     if (!pageInfo.hasNext || !pageInfo.cursor) return;
+    const searchId = searchRef.current;
     setLoadingMore(true);
     setError('');
     try {
       const { courses: data, pagination } = await fetchPage(pageInfo.cursor);
+      // The search changed while this page was loading: it belongs to the old one.
+      if (searchId !== searchRef.current) return;
       setCourses((prev) => [...prev, ...data]);
       setPageInfo({ cursor: pagination?.cursor ?? null, hasNext: !!pagination?.hasNext });
     } catch (err) {
+      if (searchId !== searchRef.current) return;
       console.error('Failed to load more courses:', err);
       setError(err.message || 'Failed to load more courses.');
     } finally {
@@ -98,10 +144,15 @@ const CourseList = () => {
   const openUniversity = (e, course) => {
     e.stopPropagation();
     if (!course.university?.id) return;
-    // The backend has no university endpoint, so pass what the course gave us
-    // through router state; the details page falls back to it.
-    navigate(`/universities/${course.university.id}`, { state: { university: course.university } });
+    // `from` lets the university page's Back link return to this search.
+    navigate(`/universities/${course.university.id}`, { state: { university: course.university, from: here } });
   };
+
+  // The university filter only carries an id. Its name comes from whoever
+  // linked here, or failing that from the first result (all are that university).
+  const scopedUniName = uniId
+    ? (location.state?.uniName ?? courses.find((c) => c.university.id === uniId)?.university.name ?? null)
+    : null;
 
   const activeFilterCount = advanced
     ? [
@@ -121,6 +172,15 @@ const CourseList = () => {
         alignItems: isMobile ? 'stretch' : 'center',
         marginBottom: '20px',
       }}>
+        {isAdmin && (
+          <SegmentedControl
+            ariaLabel="Publish status"
+            options={PUBLISH_STATUS.options}
+            value={publishStatus}
+            onChange={(value) => updateParams({ publishStatus: value === 'PUBLISHED' ? '' : value })}
+            style={isMobile ? { alignSelf: 'flex-start' } : undefined}
+          />
+        )}
         <SearchInput
           value={searchQuery}
           onChange={(e) => { setSearchQuery(e.target.value); setAdvanced(null); }}
@@ -142,6 +202,24 @@ const CourseList = () => {
         )}
       </div>
 
+      {importBatchId && (
+        <FilterNotice
+          onClear={() => updateParams({ importBatchId: '' })}
+          action={(
+            <Link to={`/bulk-imports/${importBatchId}`} style={{ fontWeight: '600', textDecoration: 'underline' }}>
+              Back to the import
+            </Link>
+          )}
+        >
+          Showing only courses from one import.
+        </FilterNotice>
+      )}
+      {uniId && (
+        <FilterNotice onClear={() => updateParams({ uniId: '' })}>
+          Showing only courses of {scopedUniName ? <strong>{scopedUniName}</strong> : 'one university'}.
+        </FilterNotice>
+      )}
+
       <Alert variant="error" onDismiss={() => setError('')}>{error}</Alert>
 
       <div style={{ color: colors.textSecondary, fontSize: '14px', marginBottom: '16px' }}>
@@ -155,7 +233,9 @@ const CourseList = () => {
         <Card>
           <div style={{ textAlign: 'center', padding: '40px', color: colors.textSecondary }}>
             <GraduationCap size={44} style={{ opacity: 0.4, marginBottom: '10px' }} />
-            <p>No courses matched your search.</p>
+            <p>
+              {publishStatus === 'DRAFT' ? 'No draft courses matched your search.' : 'No courses matched your search.'}
+            </p>
           </div>
         </Card>
       ) : (
@@ -172,8 +252,8 @@ const CourseList = () => {
               <div
                 role="button"
                 tabIndex={0}
-                onClick={() => navigate(`/courses/${course.id}`, { state: { course } })}
-                onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/courses/${course.id}`, { state: { course } }); }}
+                onClick={() => navigate(`/courses/${course.id}`, { state: { course, from: here } })}
+                onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/courses/${course.id}`, { state: { course, from: here } }); }}
                 style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', flex: 1 }}
               >
                 {/* Cover */}
@@ -190,6 +270,9 @@ const CourseList = () => {
                       <GraduationCap size={36} />
                     </div>
                   )}
+                  {!course.isPublished && (
+                    <DraftBadge style={{ position: 'absolute', top: '10px', left: '10px' }} />
+                  )}
                   {course.intake?.name && (
                     <span style={{
                       position: 'absolute', top: '10px', right: '10px',
@@ -205,6 +288,11 @@ const CourseList = () => {
                   <h3 style={{ margin: 0, fontSize: '16px', color: colors.textPrimary, lineHeight: 1.35 }}>
                     {course.name}
                   </h3>
+                  {course.programmeName && (
+                    <div style={{ fontSize: '13px', color: colors.textSecondary, marginTop: '-4px' }}>
+                      {course.programmeName}
+                    </div>
+                  )}
 
                   {/* University - clickable, stops propagation */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

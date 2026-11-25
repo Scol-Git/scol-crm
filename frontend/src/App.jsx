@@ -1,7 +1,7 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context'
-import { ProtectedRoute } from './components'
+import { ProtectedRoute, AdminRoute } from './components'
 import { MainLayout } from './layout'
 import {
   Dashboard,
@@ -9,7 +9,10 @@ import {
   LeadDetails,
   CourseList,
   CourseDetails,
+  UniversityList,
   UniversityDetails,
+  BulkImportList,
+  BulkImportDetails,
   Settings,
   Applications,
   ApplicationDetails,
@@ -45,10 +48,12 @@ function App() {
             <Route path="leads/:id" element={<LeadDetails />} />
             <Route path="courses" element={<CourseList />} />
             <Route path="courses/:id" element={<CourseDetails />} />
-            {/* Reached by clicking a university name on a course */}
+            {/* Lists draft universities too, which have no courses to find them by */}
+            <Route path="universities" element={<UniversityList />} />
             <Route path="universities/:id" element={<UniversityDetails />} />
-            {/* Old entry point - Universities is now Courses */}
-            <Route path="universities" element={<Navigate to="/courses" replace />} />
+            {/* CSV bulk import + draft review/publish - ADMIN only */}
+            <Route path="bulk-imports" element={<AdminRoute><BulkImportList /></AdminRoute>} />
+            <Route path="bulk-imports/:batchId" element={<AdminRoute><BulkImportDetails /></AdminRoute>} />
             <Route path="applications" element={<Applications />} />
             <Route path="applications/:id" element={<ApplicationDetails />} />
             <Route path="tasks" element={<Tasks />} />

@@ -139,3 +139,67 @@ const DOCUMENT_STATUS_VARIANTS = {
   VERIFIED: 'success',
 };
 export const documentStatusVariant = (status) => DOCUMENT_STATUS_VARIANTS[status] || 'default';
+
+// --- Bulk imports + draft/publish ---------------------------------------------
+
+export const BULK_IMPORT_TYPE = buildLookup([
+  ['UNIVERSITY', 'University'],
+  ['COURSE', 'Course'],
+]);
+
+export const BULK_IMPORT_STATUS = buildLookup([
+  ['AWAITING_UPLOAD', 'Awaiting upload'], // batch created, file not confirmed yet
+  ['QUEUED', 'Queued'],                   // waiting for the worker
+  ['PROCESSING', 'Processing'],           // worker is importing rows
+  ['IN_REVIEW', 'In review'],             // drafts created, ready to review/publish
+  ['NO_CHANGES', 'No changes'],           // file processed, nothing new to import
+  ['FAILED', 'Failed'],                   // whole file rejected, see failureReason
+  ['PUBLISHED', 'Published'],             // drafts are live
+  ['DISCARDED', 'Discarded'],             // drafts deleted
+]);
+
+// 'muted' is not a Badge variant; BulkImportStatusChip draws it itself.
+const BULK_IMPORT_STATUS_VARIANTS = {
+  AWAITING_UPLOAD: 'default',
+  QUEUED: 'info',
+  PROCESSING: 'info',
+  IN_REVIEW: 'warning',
+  NO_CHANGES: 'default',
+  FAILED: 'error',
+  PUBLISHED: 'success',
+  DISCARDED: 'muted',
+};
+export const bulkImportStatusVariant = (status) => BULK_IMPORT_STATUS_VARIANTS[status] || 'default';
+
+// The worker has the batch: these are the statuses worth polling.
+export const isBulkImportInFlight = (status) => status === 'QUEUED' || status === 'PROCESSING';
+
+const BULK_IMPORT_SETTLED = ['IN_REVIEW', 'NO_CHANGES', 'FAILED', 'PUBLISHED', 'DISCARDED'];
+
+// The status endpoint sends isFinal; fall back to the enum if it is absent.
+export const isBulkImportFinal = (statusDto) => (
+  typeof statusDto?.isFinal === 'boolean' ? statusDto.isFinal : BULK_IMPORT_SETTLED.includes(statusDto?.status)
+);
+
+// "Actions allowed per status" from the bulk import guide, in one place so the
+// list, the detail page and the dialogs cannot drift apart.
+export const bulkImportActions = (batch) => {
+  const status = batch?.status;
+  const filesGone = !!batch?.filesDeletedAt;
+  const hasFiles = status !== 'AWAITING_UPLOAD' && !filesGone;
+  return {
+    canReview: status === 'IN_REVIEW',
+    canPublish: status === 'IN_REVIEW',
+    canDiscard: ['IN_REVIEW', 'NO_CHANGES', 'FAILED'].includes(status),
+    canDownloadOriginal: hasFiles && !!batch?.hasOriginalFile,
+    // No errors file can exist while the worker is still running.
+    canDownloadErrors: hasFiles && !isBulkImportInFlight(status) && !!batch?.hasErrorsFile,
+  };
+};
+
+export const PUBLISH_STATUS = buildLookup([
+  ['PUBLISHED', 'Published'],
+  ['DRAFT', 'Drafts'],
+  ['ALL', 'All'],
+]);
+export const isPublishStatus = (value) => ['PUBLISHED', 'DRAFT', 'ALL'].includes(value);
