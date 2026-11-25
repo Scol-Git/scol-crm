@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test test/unit-crm-fixes.test.mjs",
+    "test:api": "node --test test/verify-remote-api.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.469.0",

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Edit2, Info, MapPin, ExternalLink, PlayCircle, Plus, Trash2 } from 'lucide-react';
-import { Card, Button, Badge, Modal, Input, Alert } from '../../components';
+import { Card, Button, Badge, Modal, Input, Select, Alert } from '../../components';
 import { courseService } from '../../services/courseService';
 import { colors } from '../../theme';
 
@@ -90,15 +90,12 @@ const CourseDetails = () => {
       setMeta(metaMap);
       setActiveTab(data?.tabs?.[0]?.key ?? null);
       const feeItems = data?.feesAndScholarships?.items ?? {};
-      // GET /crm/courses/{id} returns neither courseDuration nor
-      // applicationDeadline, so duration falls back to the search row handed
-      // over by the Courses list. On a direct URL visit it stays blank - the
-      // modal says so rather than showing an empty box that looks current.
+      const durationVal = data?.durationMonths || data?.courseDuration || data?.duration || location.state?.course?.durationMonths || '';
       setEditForm({
         courseName: data?.courseName ?? '',
         tuitionFee: feeItems.tuitionFees?.amount ?? '',
-        currency: feeItems.tuitionFees?.currency ?? '',
-        courseDuration: location.state?.course?.durationMonths ?? '',
+        currency: feeItems.tuitionFees?.currency ?? 'GBP',
+        courseDuration: durationVal,
         applicationDeadline: '',
       });
     } catch (err) {
@@ -116,10 +113,28 @@ const CourseDetails = () => {
     setSaveError('');
     try {
       const patch = {};
-      if (editForm.courseName && editForm.courseName !== course.courseName) patch.courseName = editForm.courseName;
-      if (editForm.tuitionFee !== '') patch.tuitionFee = String(editForm.tuitionFee);
+      if (editForm.courseName && editForm.courseName.trim() !== course.courseName) {
+        patch.courseName = editForm.courseName.trim();
+      }
+      if (editForm.tuitionFee !== '') {
+        const feeNum = Number(editForm.tuitionFee);
+        if (Number.isNaN(feeNum) || feeNum <= 0) {
+          setSaveError('Tuition fee must be a positive number greater than 0.');
+          setSaving(false);
+          return;
+        }
+        patch.tuitionFee = String(feeNum);
+      }
       if (editForm.currency) patch.currency = editForm.currency;
-      if (editForm.courseDuration !== '') patch.courseDuration = Number(editForm.courseDuration);
+      if (editForm.courseDuration !== '') {
+        const durNum = Number(editForm.courseDuration);
+        if (Number.isNaN(durNum) || durNum <= 0) {
+          setSaveError('Duration must be a positive number of months.');
+          setSaving(false);
+          return;
+        }
+        patch.courseDuration = durNum;
+      }
       if (editForm.applicationDeadline) patch.applicationDeadline = editForm.applicationDeadline;
 
       if (Object.keys(patch).length === 0) { setShowEdit(false); return; }
@@ -203,14 +218,15 @@ const CourseDetails = () => {
   const uni = course.university ?? {};
   const openMetaModal = (m) => { setOpenMeta(m); setMetaEditing(false); setMetaSaveError(''); };
   const goToUniversity = () => {
-    if (!uni.uniId) return;
-    navigate(`/universities/${uni.uniId}`, {
+    const uniId = uni.uniId || uni.id || course.universityId;
+    if (!uniId) return;
+    navigate(`/universities/${uniId}`, {
       state: {
         university: {
-          id: uni.uniId,
-          name: uni.uniName,
-          logoUrl: uni.uniLogoUrl,
-          imgUrl: uni.uniCoverImageUrl,
+          id: uniId,
+          name: uni.uniName || uni.name,
+          logoUrl: uni.uniLogoUrl || uni.logoUrl,
+          imgUrl: uni.uniCoverImageUrl || uni.coverImageUrl,
           country: course.location?.country,
           state: course.location?.state,
           city: course.location?.city,
@@ -408,9 +424,12 @@ const CourseDetails = () => {
                 <Row
                   key={`eng-${i}`}
                   label={t.testName}
-                  value={`${t.minOverallValue}${t.minSectionValue ? ` / ${t.minSectionValue}` : ''}`}
+                  value={`Overall: ${t.minOverallValue}${t.minSectionValue ? ` / Min Section: ${t.minSectionValue}` : ''}`}
                 />
               ))}
+              {(!req.degreeRequirements?.length && !req.englishRequirements?.length) && (
+                <p style={{ color: colors.textSecondary }}>No specific degree or English requirements listed.</p>
+              )}
             </>
           ) : <p style={{ color: colors.textSecondary }}>No academic requirements published.</p>}
         </Card>
@@ -423,15 +442,18 @@ const CourseDetails = () => {
           </SectionTitle>
           {course.feesAndScholarships?.hasInfo && fees ? (
             <>
-              <Row
-                label="Tuition Fees"
-                value={fees.tuitionFees
-                  ? `${fees.tuitionFees.currency ?? ''}${Number(fees.tuitionFees.amount).toLocaleString()}${fees.tuitionFees.frequency ? `/${fees.tuitionFees.frequency}` : ''}`
-                  : null}
-              />
-              <Row label="Initial Deposit" value={fees.initialDeposit} />
-              <Row label="Application Fee" value={fees.applicationFee != null ? Number(fees.applicationFee).toLocaleString() : null} />
-              <Row label="Scholarships" value={fees.scholarships} />
+              {fees.tuitionFees && (
+                <Row
+                  label="Tuition Fees"
+                  value={`${fees.tuitionFees.currency ?? ''}${Number(fees.tuitionFees.amount).toLocaleString()}${fees.tuitionFees.frequency ? `/${fees.tuitionFees.frequency}` : ''}`}
+                />
+              )}
+              {fees.initialDeposit && <Row label="Initial Deposit" value={fees.initialDeposit} />}
+              {fees.applicationFee != null && <Row label="Application Fee" value={Number(fees.applicationFee).toLocaleString()} />}
+              {fees.scholarships && <Row label="Scholarships" value={fees.scholarships} />}
+              {(!fees.tuitionFees && !fees.initialDeposit && fees.applicationFee == null && !fees.scholarships) && (
+                <p style={{ color: colors.textSecondary }}>No fee information published.</p>
+              )}
             </>
           ) : <p style={{ color: colors.textSecondary }}>No fee information published.</p>}
         </Card>
@@ -538,14 +560,23 @@ const CourseDetails = () => {
           <Input
             label="Tuition Fee"
             name="tuitionFee"
+            type="number"
             value={editForm.tuitionFee}
             onChange={(e) => setEditForm({ ...editForm, tuitionFee: e.target.value })}
           />
-          <Input
+          <Select
             label="Currency"
             name="currency"
             value={editForm.currency}
             onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })}
+            options={[
+              { value: 'GBP', label: 'GBP (£)' },
+              { value: 'USD', label: 'USD ($)' },
+              { value: 'CAD', label: 'CAD (C$)' },
+              { value: 'AUD', label: 'AUD (A$)' },
+              { value: 'EUR', label: 'EUR (€)' },
+              { value: 'BDT', label: 'BDT (৳)' },
+            ]}
           />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -565,8 +596,7 @@ const CourseDetails = () => {
           />
         </div>
         <p style={{ margin: '-4px 0 0', fontSize: '12px', color: colors.textSecondary }}>
-          The application deadline is not returned by the API, so it cannot be shown here.
-          Leave a field blank to keep its current value.
+          Leave optional fields blank to keep their current values.
         </p>
       </Modal>
     </div>

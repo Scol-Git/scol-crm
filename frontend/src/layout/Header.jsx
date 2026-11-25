@@ -286,9 +286,14 @@ const Header = ({ title, onMenuClick, isMobile }) => {
           <Search size={18} style={searchIconStyle} />
           <input
             type="text"
-            placeholder="Global search..."
+            placeholder="Search courses and press Enter..."
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && searchValue.trim()) {
+                navigate(`/courses?search=${encodeURIComponent(searchValue.trim())}`);
+              }
+            }}
             style={searchInputStyle}
           />
         </div>
@@ -587,8 +592,19 @@ const Header = ({ title, onMenuClick, isMobile }) => {
 
         <div
           ref={userMenuRef}
+          role="button"
+          tabIndex={0}
+          aria-haspopup="true"
+          aria-expanded={showUserMenu}
+          aria-label="User profile menu"
           style={userMenuStyle}
           onClick={() => setShowUserMenu(!showUserMenu)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setShowUserMenu(!showUserMenu);
+            }
+          }}
           onMouseEnter={(e) => {
             e.currentTarget.style.backgroundColor = colors.sidebarBg;
           }}
@@ -596,10 +612,16 @@ const Header = ({ title, onMenuClick, isMobile }) => {
             e.currentTarget.style.backgroundColor = 'transparent';
           }}
         >
-          <div style={avatarStyle}>{user?.fullName?.charAt(0) || 'A'}</div>
+          <div style={avatarStyle}>
+            {(user?.fullName || user?.name || user?.email || 'U').charAt(0).toUpperCase()}
+          </div>
           <div style={userInfoStyle}>
-            <span style={userNameStyle}>{user?.fullName || 'Admin User'}</span>
-            <span style={userRoleStyle}>{user?.userType === 'admin' ? 'Administrator' : 'User'}</span>
+            <span style={userNameStyle}>{user?.fullName || user?.name || user?.email || 'User'}</span>
+            <span style={userRoleStyle}>
+              {Array.isArray(user?.userRole) && user.userRole.length > 0
+                ? user.userRole.map(r => r.charAt(0).toUpperCase() + r.slice(1).toLowerCase()).join(', ')
+                : (user?.role || (user?.userType === 'admin' ? 'Administrator' : 'Staff'))}
+            </span>
           </div>
           <ChevronDown size={16} color={colors.textMuted} />
 

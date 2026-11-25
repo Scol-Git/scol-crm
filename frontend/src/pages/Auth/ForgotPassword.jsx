@@ -35,6 +35,18 @@ const ForgotPassword = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    let cleanedPhone = formData.phone.replace(/[\s\-()]/g, '');
+    if (cleanedPhone.startsWith('+880')) {
+      cleanedPhone = '0' + cleanedPhone.slice(4);
+    } else if (cleanedPhone.startsWith('880')) {
+      cleanedPhone = '0' + cleanedPhone.slice(3);
+    }
+
+    if (!/^01[3-9]\d{8}$/.test(cleanedPhone)) {
+      setError('Please enter a valid 11-digit Bangladeshi phone number (e.g. 01837917991)');
+      return;
+    }
+
     if (formData.newPassword.length < 8) {
       setError('Password must be at least 8 characters');
       return;
@@ -50,12 +62,12 @@ const ForgotPassword = () => {
 
     try {
       const result = await authService.forgotPassword({
-        phone: formData.phone,
+        phone: cleanedPhone,
         newPassword: formData.newPassword,
       });
       navigate('/verify-otp', {
         state: {
-          phone: formData.phone,
+          phone: cleanedPhone,
           otpAccessToken: result.otpAccessToken,
           purpose: 'password_reset',
         }

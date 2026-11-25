@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FileText,
@@ -18,26 +18,30 @@ import {
   applicationStatusVariant,
   APPLICATION_STAGE,
   applicationStageVariant,
+  getStageAllowedStatuses,
 } from '../../services/mappers';
 import { colors } from '../../theme';
 
 const Applications = () => {
   const navigate = useNavigate();
   const [applications, setApplications] = useState([]);
+  const [selectedAppIds, setSelectedAppIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [pageInfo, setPageInfo] = useState({ cursor: null, hasNext: false });
   const [error, setError] = useState('');
   const [statistics, setStatistics] = useState(null);
-  const [actionError, setActionError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [stageFilter, setStageFilter] = useState('');
   const [consultantFilter, setConsultantFilter] = useState('');
   const [consultants, setConsultants] = useState([]);
   const [dateFilters, setDateFilters] = useState({ dateFrom: '', dateTo: '' });
+  const [dateError, setDateError] = useState('');
   const [showAddNoteModal, setShowAddNoteModal] = useState(false);
+  const [noteModalError, setNoteModalError] = useState('');
   const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusModalError, setStatusModalError] = useState('');
   const [selectedApplication, setSelectedApplication] = useState(null);
   const [noteContent, setNoteContent] = useState('');
   const [newStatus, setNewStatus] = useState('');
@@ -57,6 +61,8 @@ const Applications = () => {
   const [courseQuery, setCourseQuery] = useState('');
   const [courseResults, setCourseResults] = useState([]);
   const [courseSearching, setCourseSearching] = useState(false);
+  const [courseLoading, setCourseLoading] = useState(false);
+  const [courseIntakes, setCourseIntakes] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [intakeMonth, setIntakeMonth] = useState('');
   const [intakeYear, setIntakeYear] = useState('');
@@ -154,6 +160,8 @@ const Applications = () => {
     setCourseQuery('');
     setCourseResults([]);
     setSelectedCourse(null);
+    setCourseIntakes([]);
+    setCourseLoading(false);
     setIntakeMonth('');
     setIntakeYear('');
     setNewAppError('');
@@ -167,15 +175,89 @@ const Applications = () => {
     setLeadQuery(lead.fullName || lead.email || lead.phone || '');
   };
 
-  const selectCourseForApplication = (course) => {
+  const selectCourseForApplication = async (course) => {
     setSelectedCourse(course);
     setCourseResults([]);
     setCourseQuery(`${course.name} — ${course.university?.name ?? 'Unknown university'}`);
+    setCourseLoading(true);
+    try {
+      // SCOL-CRM-001 & SCOL-CRM-021:
+      // The search endpoint returns courseIntake.id as `courseId`.
+      // Calling getById resolves the real uniCourseId and all available upcoming intakes.
+      const details = await courseService.getById(course.id);
+      const realCourseId = details?.course?.courseId || course.id;
+      const rawIntakes = details?.course?.upcomingIntakes || details?.course?.intakes || [];
+      const stringIntakes = Array.isArray(details?.course?.intakeDates?.intakes) ? details.course.intakeDates.intakes : [];
+
+      let availableIntakes = [];
+      if (Array.isArray(rawIntakes) && rawIntakes.length > 0) {
+        availableIntakes = rawIntakes.map(item => ({
+          month: item.intakeMonth,
+          year: item.intakeYear,
+          label: `${MONTHS.find(m => m.value === item.intakeMonth)?.label || item.intakeMonth} ${item.intakeYear}`,
+          value: `${item.intakeMonth}-${item.intakeYear}`,
+        }));
+      } else if (stringIntakes.length > 0) {
+        availableIntakes = stringIntakes.map((str) => {
+          const parts = String(str).trim().split(/\s+/);
+          const monthName = parts[0];
+          const yearNum = Number(parts[1]) || new Date().getFullYear();
+          const matchedMonth = MONTHS.find(m => m.label.toLowerCase() === monthName?.toLowerCase() || String(m.value) === monthName);
+          const monthNum = matchedMonth ? matchedMonth.value : 12;
+          return {
+            month: monthNum,
+            year: yearNum,
+            label: `${MONTHS.find(m => m.value === monthNum)?.label || monthNum} ${yearNum}`,
+            value: `${monthNum}-${yearNum}`,
+          };
+        });
+      } else if (course.intake) {
+        const monthNum = typeof course.intake.name === 'string'
+          ? (MONTHS.find(m => m.label.toLowerCase() === course.intake.name.toLowerCase())?.value || 12)
+          : (course.intake.intakeMonth || 12);
+        const yearNum = course.intake.year || course.intake.intakeYear || new Date().getFullYear();
+        availableIntakes = [{
+          month: monthNum,
+          year: yearNum,
+          label: `${MONTHS.find(m => m.value === monthNum)?.label || monthNum} ${yearNum}`,
+          value: `${monthNum}-${yearNum}`,
+        }];
+      }
+
+      setCourseIntakes(availableIntakes);
+      if (availableIntakes.length > 0) {
+        setIntakeMonth(String(availableIntakes[0].month));
+        setIntakeYear(String(availableIntakes[0].year));
+      }
+      setSelectedCourse({
+        ...course,
+        realCourseId,
+      });
+    } catch (err) {
+      console.error('Failed to load course details for application:', err);
+      if (course.intake) {
+        const monthNum = typeof course.intake.name === 'string'
+          ? (MONTHS.find(m => m.label.toLowerCase() === course.intake.name.toLowerCase())?.value || 12)
+          : (course.intake.intakeMonth || 12);
+        const yearNum = course.intake.year || course.intake.intakeYear || new Date().getFullYear();
+        setCourseIntakes([{
+          month: monthNum,
+          year: yearNum,
+          label: `${MONTHS.find(m => m.value === monthNum)?.label || monthNum} ${yearNum}`,
+          value: `${monthNum}-${yearNum}`,
+        }]);
+        setIntakeMonth(String(monthNum));
+        setIntakeYear(String(yearNum));
+      }
+    } finally {
+      setCourseLoading(false);
+    }
   };
 
   const handleCreateApplication = async () => {
-    if (!selectedLead?.id || !selectedCourse?.university?.id || !selectedCourse?.id || !intakeMonth || !intakeYear) {
-      setNewAppError('Select a lead, a course, and an intake month/year.');
+    const courseIdToSend = selectedCourse?.realCourseId || selectedCourse?.id;
+    if (!selectedLead?.id || !selectedCourse?.university?.id || !courseIdToSend || !intakeMonth || !intakeYear) {
+      setNewAppError('Select a lead, a course, and an intake.');
       return;
     }
     setNewAppSaving(true);
@@ -183,7 +265,7 @@ const Applications = () => {
     try {
       await applicationService.create(selectedLead.id, {
         universityId: selectedCourse.university.id,
-        courseId: selectedCourse.id,
+        courseId: courseIdToSend,
         intake: { intakeMonth: Number(intakeMonth), intakeYear: Number(intakeYear) },
       });
       setShowNewAppModal(false);
@@ -201,6 +283,11 @@ const Applications = () => {
   // Search + filters are applied server-side (debounced); any change resets
   // back to the first page.
   useEffect(() => {
+    if (dateFilters.dateFrom && dateFilters.dateTo && dateFilters.dateFrom > dateFilters.dateTo) {
+      setDateError('From date cannot be after To date.');
+      return undefined;
+    }
+    setDateError('');
     const timer = setTimeout(() => loadApplications(), 350);
     return () => clearTimeout(timer);
   }, [searchQuery, statusFilter, stageFilter, consultantFilter, dateFilters.dateFrom, dateFilters.dateTo]);
@@ -250,22 +337,27 @@ const Applications = () => {
 
   const handleSaveNote = async () => {
     if (!noteContent.trim() || !selectedApplication) return;
+    if (noteContent.length > 1000) {
+      setNoteModalError('Note description must be 1000 characters or fewer.');
+      return;
+    }
     if (!selectedApplication.leadId) {
-      setActionError('This application has no linked lead id, so the note cannot be saved.');
+      setNoteModalError('This application has no linked lead id, so the note cannot be saved.');
       return;
     }
     setSavingAction(true);
-    setActionError('');
+    setNoteModalError('');
     try {
       await applicationService.addNote(selectedApplication.leadId, selectedApplication.id, {
         description: noteContent.trim(),
       });
       setShowAddNoteModal(false);
       setNoteContent('');
+      setNoteModalError('');
       setSelectedApplication(null);
     } catch (err) {
       console.error('Failed to save note:', err);
-      setActionError(err.message || 'Failed to save note. Please try again.');
+      setNoteModalError(err.message || 'Failed to save note. Please try again.');
     } finally {
       setSavingAction(false);
     }
@@ -274,11 +366,11 @@ const Applications = () => {
   const handleSaveStatus = async () => {
     if (!newStatus || !selectedApplication) return;
     if (!selectedApplication.leadId) {
-      setActionError('This application has no linked lead id, so the status cannot be changed.');
+      setStatusModalError('This application has no linked lead id, so the status cannot be changed.');
       return;
     }
     setSavingAction(true);
-    setActionError('');
+    setStatusModalError('');
     try {
       await applicationService.changeStatus(selectedApplication.leadId, selectedApplication.id, {
         toStatus: newStatus,
@@ -287,11 +379,12 @@ const Applications = () => {
       setShowStatusModal(false);
       setNewStatus('');
       setStatusRemarks('');
+      setStatusModalError('');
       setSelectedApplication(null);
       loadApplications();
     } catch (err) {
       console.error('Failed to update status:', err);
-      setActionError(err.message || 'Failed to update status. Please try again.');
+      setStatusModalError(err.message || 'Failed to update status. Please try again.');
     } finally {
       setSavingAction(false);
     }
@@ -315,11 +408,48 @@ const Applications = () => {
     }
   };
 
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedAppIds(new Set(applications.map((a) => a.id)));
+    } else {
+      setSelectedAppIds(new Set());
+    }
+  };
+
+  const handleToggleSelect = (id, e) => {
+    e.stopPropagation();
+    setSelectedAppIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const allSelected = applications.length > 0 && selectedAppIds.size === applications.length;
+
   const columns = [
     {
-      title: <input type="checkbox" style={{ cursor: 'pointer' }} />,
+      title: (
+        <input
+          type="checkbox"
+          aria-label="Select all applications"
+          checked={allSelected}
+          onChange={handleSelectAll}
+          style={{ cursor: 'pointer' }}
+        />
+      ),
       dataIndex: 'id',
-      render: () => <input type="checkbox" style={{ cursor: 'pointer' }} onClick={(e) => e.stopPropagation()} />,
+      render: (id, row) => (
+        <input
+          type="checkbox"
+          aria-label={`Select application ${row.serialNumber || id}`}
+          checked={selectedAppIds.has(id)}
+          onChange={(e) => handleToggleSelect(id, e)}
+          onClick={(e) => e.stopPropagation()}
+          style={{ cursor: 'pointer' }}
+        />
+      ),
       width: '40px',
     },
     {
@@ -414,6 +544,7 @@ const Applications = () => {
             onClick={(e) => {
               e.stopPropagation();
               setSelectedApplication(row);
+              setNoteModalError('');
               setShowAddNoteModal(true);
             }}
           >
@@ -426,6 +557,7 @@ const Applications = () => {
               e.stopPropagation();
               setSelectedApplication(row);
               setNewStatus(row.status || '');
+              setStatusModalError('');
               setShowStatusModal(true);
             }}
           >
@@ -437,7 +569,7 @@ const Applications = () => {
             icon={Eye}
             onClick={(e) => {
               e.stopPropagation();
-              navigate(`/applications/${id}`, { state: { leadId: row.leadId } });
+              navigate(`/applications/${id}?leadId=${row.leadId}`, { state: { leadId: row.leadId } });
             }}
           >
             View
@@ -448,6 +580,11 @@ const Applications = () => {
   ];
 
   const statusOptions = APPLICATION_STATUS.options;
+  const modalStatusOptions = useMemo(() => {
+    if (!selectedApplication?.stage) return APPLICATION_STATUS.options;
+    const allowed = getStageAllowedStatuses(selectedApplication.stage);
+    return APPLICATION_STATUS.options.filter((opt) => allowed.includes(opt.value));
+  }, [selectedApplication?.stage]);
 
   // The backend rejects these status changes without remarks (verified live),
   // so require one here instead of surfacing a 400.
@@ -643,6 +780,11 @@ const Applications = () => {
                 containerStyle={{ flex: 1, marginBottom: 0 }}
               />
             </div>
+            {dateError && (
+              <span style={{ fontSize: '12px', color: colors.error, marginTop: '-4px' }}>
+                {dateError}
+              </span>
+            )}
           </div>
         </div>
         <div style={{
@@ -663,6 +805,22 @@ const Applications = () => {
         </div>
       </div>
 
+      {/* Bulk actions banner */}
+      {selectedAppIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 16px', backgroundColor: '#EFF6FF',
+          border: `1px solid ${colors.brandPrimary}`, borderRadius: '8px', marginBottom: '16px',
+        }}>
+          <span style={{ fontSize: '14px', fontWeight: '500', color: colors.brandPrimary }}>
+            {selectedAppIds.size} application(s) selected
+          </span>
+          <Button size="small" variant="secondary" onClick={() => setSelectedAppIds(new Set())}>
+            Clear Selection
+          </Button>
+        </div>
+      )}
+
       {/* Load / filter errors */}
       <Alert variant="error" onDismiss={() => setError('')}>{error}</Alert>
 
@@ -673,7 +831,7 @@ const Applications = () => {
             columns={columns}
             data={applications}
             loading={loading}
-            onRowClick={(app) => navigate(`/applications/${app.id}`, { state: { leadId: app.leadId } })}
+            onRowClick={(app) => navigate(`/applications/${app.id}?leadId=${app.leadId}`, { state: { leadId: app.leadId } })}
             emptyMessage="No applications found"
           />
         </div>
@@ -699,6 +857,7 @@ const Applications = () => {
         onClose={() => {
           setShowAddNoteModal(false);
           setNoteContent('');
+          setNoteModalError('');
           setSelectedApplication(null);
         }}
         title="Add Application Note"
@@ -708,36 +867,45 @@ const Applications = () => {
             <Button variant="ghost" onClick={() => {
               setShowAddNoteModal(false);
               setNoteContent('');
+              setNoteModalError('');
               setSelectedApplication(null);
             }}>
               Cancel
             </Button>
-            <Button onClick={handleSaveNote} disabled={savingAction}>
+            <Button onClick={handleSaveNote} disabled={savingAction || noteContent.length > 1000}>
               {savingAction ? 'Saving...' : 'Save Note'}
             </Button>
           </>
         }
       >
         <div style={{ padding: '16px 0' }}>
-          <Alert variant="error" onDismiss={() => setActionError('')}>{actionError}</Alert>
+          <Alert variant="error" onDismiss={() => setNoteModalError('')}>{noteModalError}</Alert>
           <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: colors.textPrimary, fontWeight: '500' }}>
             Note Content
           </label>
           <textarea
             value={noteContent}
             onChange={(e) => setNoteContent(e.target.value)}
+            maxLength={1000}
             placeholder="Write your note here..."
             style={{
               width: '100%',
               minHeight: '120px',
               padding: '12px',
               borderRadius: '8px',
-              border: `1px solid ${colors.borderLight}`,
+              border: `1px solid ${noteContent.length > 1000 ? colors.error : colors.borderLight}`,
               fontSize: '14px',
               fontFamily: 'inherit',
-              resize: 'vertical'
+              resize: 'vertical',
+              boxSizing: 'border-box',
             }}
           />
+          <div style={{
+            display: 'flex', justifyContent: 'flex-end', marginTop: '4px',
+            fontSize: '12px', color: noteContent.length >= 900 ? colors.warning : colors.textSecondary,
+          }}>
+            {noteContent.length} / 1000 characters
+          </div>
         </div>
       </Modal>
 
@@ -748,6 +916,7 @@ const Applications = () => {
           setShowStatusModal(false);
           setNewStatus('');
           setStatusRemarks('');
+          setStatusModalError('');
           setSelectedApplication(null);
         }}
         title="Update Application Status"
@@ -758,6 +927,7 @@ const Applications = () => {
               setShowStatusModal(false);
               setNewStatus('');
               setStatusRemarks('');
+              setStatusModalError('');
               setSelectedApplication(null);
             }}>
               Cancel
@@ -772,12 +942,16 @@ const Applications = () => {
         }
       >
         <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <Alert variant="error" onDismiss={() => setActionError('')}>{actionError}</Alert>
+          <Alert variant="error" onDismiss={() => setStatusModalError('')}>{statusModalError}</Alert>
           <Select
             label="New Status"
             value={newStatus}
-            onChange={(e) => setNewStatus(e.target.value)}
-            options={statusOptions}
+            onChange={(e) => {
+              setNewStatus(e.target.value);
+              setStatusRemarks('');
+              setStatusModalError('');
+            }}
+            options={modalStatusOptions}
             containerStyle={{ marginBottom: 0 }}
           />
           <div>
@@ -801,7 +975,8 @@ const Applications = () => {
                 border: `1px solid ${colors.borderLight}`,
                 fontSize: '14px',
                 fontFamily: 'inherit',
-                resize: 'vertical'
+                resize: 'vertical',
+                boxSizing: 'border-box',
               }}
             />
           </div>
@@ -899,7 +1074,7 @@ const Applications = () => {
               {' '}
               <button
                 type="button"
-                onClick={() => { setSelectedCourse(null); setCourseQuery(''); }}
+                onClick={() => { setSelectedCourse(null); setCourseQuery(''); setCourseIntakes([]); }}
                 style={{ border: 'none', background: 'transparent', color: colors.brandPrimary, cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit', fontSize: '13px' }}
               >
                 Change
@@ -944,22 +1119,43 @@ const Applications = () => {
 
         {/* Step 3: intake - only once lead and course are both picked */}
         {selectedLead && selectedCourse && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <Select
-              label="Intake Month"
-              value={intakeMonth}
-              onChange={(e) => setIntakeMonth(e.target.value)}
-              options={MONTHS.map((m) => ({ value: String(m.value), label: m.label }))}
-              placeholder="Select month"
-            />
-            <Input
-              label="Intake Year"
-              type="number"
-              value={intakeYear}
-              onChange={(e) => setIntakeYear(e.target.value)}
-              placeholder="e.g. 2026"
-            />
-          </div>
+          courseLoading ? (
+            <div style={{ padding: '12px', color: colors.textSecondary, fontSize: '14px' }}>Loading course intake details...</div>
+          ) : courseIntakes.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <Select
+                label="Available Course Intake"
+                value={`${intakeMonth}-${intakeYear}`}
+                onChange={(e) => {
+                  const [m, y] = e.target.value.split('-');
+                  setIntakeMonth(m);
+                  setIntakeYear(y);
+                }}
+                options={courseIntakes.map((ci) => ({ value: ci.value, label: ci.label }))}
+                placeholder="Select course intake"
+              />
+              <span style={{ fontSize: '12px', color: colors.textSecondary }}>
+                Offered by {selectedCourse.university?.name || selectedCourse.university?.uniName}
+              </span>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <Select
+                label="Intake Month"
+                value={intakeMonth}
+                onChange={(e) => setIntakeMonth(e.target.value)}
+                options={MONTHS.map((m) => ({ value: String(m.value), label: m.label }))}
+                placeholder="Select month"
+              />
+              <Input
+                label="Intake Year"
+                type="number"
+                value={intakeYear}
+                onChange={(e) => setIntakeYear(e.target.value)}
+                placeholder="e.g. 2026"
+              />
+            </div>
+          )
         )}
       </Modal>
     </div>

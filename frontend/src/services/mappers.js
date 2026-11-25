@@ -67,6 +67,29 @@ const APPLICATION_STATUS_VARIANTS = {
 };
 export const applicationStatusVariant = (status) => APPLICATION_STATUS_VARIANTS[status] || 'default';
 
+// Allowed statuses based on current application stage (matches backend workflow validation)
+export const getStageAllowedStatuses = (stage) => {
+  const normalized = (stage || '').toUpperCase();
+  switch (normalized) {
+    case 'ENROLLED':
+      return ['IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
+    case 'COLLECT_COMMISSION':
+    case 'COMPLETED':
+      return ['COMPLETED', 'CANCELLED'];
+    case 'VISA':
+    case 'CAS_COE':
+    case 'PAYMENT':
+    case 'INTERVIEW':
+    case 'CONDITIONAL':
+    case 'UNCONDITIONAL':
+    case 'SUBMITTED':
+      return ['IN_PROGRESS', 'PENDING', 'ON_HOLD', 'COMPLETED', 'REJECTED', 'CANCELLED'];
+    case 'REVIEW':
+    default:
+      return ['PENDING', 'IN_PROGRESS', 'ON_HOLD', 'REJECTED', 'CANCELLED'];
+  }
+};
+
 export const APPLICATION_STAGE = buildLookup([
   ['REVIEW', 'Review'],
   ['SUBMITTED', 'Submitted'],

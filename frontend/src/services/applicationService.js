@@ -142,12 +142,15 @@ export const applicationService = {
   },
 
   // Resolves the owning leadId for an application when it wasn't passed via
-  // router state (direct URL / refresh). Walks the cursor rather than only
-  // checking the first page.
+  // router state (direct URL / refresh). Walks the cursor with a wide date range
+  // so the server's default single-month window doesn't hide older applications.
   async findLeadId(applicationId, { maxPages = 20 } = {}) {
     let cursor = null;
     for (let page = 0; page < maxPages; page += 1) {
-      const { applications, pagination } = await this.getAll({ cursor });
+      const { applications, pagination } = await this.getAll({
+        cursor,
+        ranges: { dateRange: { startDate: '2020-01-01', endDate: '2035-12-31' } },
+      });
       const match = applications.find((a) => a.id === applicationId);
       if (match?.leadId) return match.leadId;
       if (!pagination?.hasNext || !pagination?.cursor) break;

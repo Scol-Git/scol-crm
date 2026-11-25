@@ -77,6 +77,36 @@ export const leadService = {
     return { leads: items.map(normalizeLead), pagination };
   },
 
+  // Searches lead list across wide date range to find a lead by id
+  // (preserves city, gender, country, consultant, registerSource on page refresh)
+  async findLead(id) {
+    if (!id) return null;
+    try {
+      const res = await this.getAll({
+        ranges: { startDate: '2020-01-01', endDate: '2035-12-31' },
+        limit: 50,
+      });
+      const match = (res.leads || []).find((l) => l.id === id);
+      if (match) return match;
+      let cursor = res.pagination?.cursor;
+      let pages = 0;
+      while (cursor && pages < 5) {
+        pages++;
+        const nextRes = await this.getAll({
+          ranges: { startDate: '2020-01-01', endDate: '2035-12-31' },
+          cursor,
+          limit: 50,
+        });
+        const nextMatch = (nextRes.leads || []).find((l) => l.id === id);
+        if (nextMatch) return nextMatch;
+        cursor = nextRes.pagination?.cursor;
+      }
+    } catch (e) {
+      console.warn('findLead query failed:', e);
+    }
+    return null;
+  },
+
   // GET /crm/leads/{leadId}/profile now exists, so a direct URL visit no longer
   // needs the old cursor walk through the list.
   async getById(id) {
@@ -157,6 +187,7 @@ export const leadService = {
       name: formData.fullName,
       phone: formData.phone,
       ...(formData.email ? { email: formData.email } : {}),
+      ...(formData.dateOfBirth ? { dateOfBirth: formData.dateOfBirth } : {}),
       ...(formData.address ? { address: formData.address } : {}),
       ...(formData.city ? { city: formData.city } : {}),
       ...(formData.gender ? { gender: formData.gender } : {}),
@@ -183,6 +214,7 @@ export const leadService = {
     fullName: 'name',
     phone: 'phone',
     email: 'email',
+    dateOfBirth: 'dateOfBirth',
     address: 'address',
     city: 'city',
     gender: 'gender',

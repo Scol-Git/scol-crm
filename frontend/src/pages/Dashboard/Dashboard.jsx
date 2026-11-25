@@ -3,8 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   Users,
   GraduationCap,
-  BookOpen,
-  TrendingUp,
   ArrowRight,
   Filter,
 } from 'lucide-react';
@@ -18,6 +16,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [dateFilters, setDateFilters] = useState({ dateFrom: '', dateTo: '' });
+  const [dateError, setDateError] = useState('');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
@@ -31,6 +30,11 @@ const Dashboard = () => {
   }, []);
 
   useEffect(() => {
+    if (dateFilters.dateFrom && dateFilters.dateTo && dateFilters.dateFrom > dateFilters.dateTo) {
+      setDateError('From Date cannot be later than To Date.');
+      return;
+    }
+    setDateError('');
     loadStats();
   }, [dateFilters]);
 
@@ -136,21 +140,26 @@ const Dashboard = () => {
           <Filter size={18} />
           <span style={{ fontSize: '14px', fontWeight: '500' }}>Filter Date Range:</span>
         </div>
-        <div style={{ display: 'flex', gap: '8px', flex: isMobile ? 1 : 'none' }}>
-          <Input
-            type="date"
-            placeholder="From Date"
-            value={dateFilters.dateFrom}
-            onChange={(e) => setDateFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
-            containerStyle={{ flex: 1, marginBottom: 0 }}
-          />
-          <Input
-            type="date"
-            placeholder="To Date"
-            value={dateFilters.dateTo}
-            onChange={(e) => setDateFilters(prev => ({ ...prev, dateTo: e.target.value }))}
-            containerStyle={{ flex: 1, marginBottom: 0 }}
-          />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: isMobile ? 1 : 'none' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Input
+              type="date"
+              placeholder="From Date"
+              value={dateFilters.dateFrom}
+              onChange={(e) => setDateFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+              containerStyle={{ flex: 1, marginBottom: 0 }}
+            />
+            <Input
+              type="date"
+              placeholder="To Date"
+              value={dateFilters.dateTo}
+              onChange={(e) => setDateFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+              containerStyle={{ flex: 1, marginBottom: 0 }}
+            />
+          </div>
+          {dateError && (
+            <span style={{ fontSize: '12px', color: colors.error }}>{dateError}</span>
+          )}
         </div>
       </div>
 
@@ -218,7 +227,7 @@ const Dashboard = () => {
                   { key: 'unconditional', label: 'Unconditional', color: '#10B981' },
                   { key: 'interview', label: 'Interview', color: '#8B5CF6' },
                   { key: 'payment', label: 'Payment', color: '#EC4899' },
-                  { key: 'cas', label: 'CAS/COE/120', color: '#06B6D4' },
+                  { key: 'cas', label: 'CAS/COE/I-20', color: '#06B6D4' },
                   { key: 'visa', label: 'VISA', color: '#14B8A6' },
                 ];
 
@@ -260,7 +269,7 @@ const Dashboard = () => {
                 { key: 'unconditional', label: 'Unconditional offer', color: '#10B981' },
                 { key: 'interview', label: 'Interview', color: '#8B5CF6' },
                 { key: 'payment', label: 'Payment', color: '#EC4899' },
-                { key: 'cas', label: 'CAS/COE/120', color: '#06B6D4' },
+                { key: 'cas', label: 'CAS/COE/I-20', color: '#06B6D4' },
                 { key: 'visa', label: 'VISA', color: '#14B8A6' },
               ].map(legend => (
                 <div key={legend.key} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: colors.textSecondary }}>

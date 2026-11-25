@@ -284,6 +284,10 @@ const CourseList = () => {
         isOpen={showAdvanced}
         onClose={() => setShowAdvanced(false)}
         initialValues={advancedForm}
+        onReset={() => {
+          setAdvanced(null);
+          setAdvancedForm(ADVANCED_SEARCH_DEFAULTS);
+        }}
         onSearch={({ _formState, ...payload }) => {
           setAdvancedForm(_formState);
           setSearchQuery('');

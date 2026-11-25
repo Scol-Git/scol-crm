@@ -15,6 +15,7 @@ import {
   ApplicationDetails,
   Tasks,
   Reports,
+  NotFound,
   Login,
   Register,
   ForgotPassword,
@@ -53,10 +54,11 @@ function App() {
             <Route path="tasks" element={<Tasks />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="*" element={<NotFound />} />
           </Route>
 
-          {/* Catch all - redirect to dashboard */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          {/* Catch all fallback */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

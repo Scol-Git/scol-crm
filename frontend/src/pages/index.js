@@ -8,4 +8,5 @@ export { default as Settings } from './Settings';
 export { Applications, ApplicationDetails } from './Applications';
 export { default as Tasks } from './Tasks';
 export { default as Reports } from './Reports';
+export { default as NotFound } from './NotFound/NotFound';
 export { Login, Register, ForgotPassword, VerifyOtp } from './Auth';

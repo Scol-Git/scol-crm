@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -18,6 +18,7 @@ import {
   APPLICATION_STAGE,
   applicationStageVariant,
   documentStatusVariant,
+  getStageAllowedStatuses,
 } from '../../services/mappers';
 import { colors } from '../../theme';
 
@@ -36,12 +37,7 @@ const normalizeActivity = (raw = {}) => ({
 // order, documentChecklistItems: [{ documentType: { documentTypeId,
 // documentTypeCode, documentTypeName }, isRequired, isMultipleAllowed,
 // overallStatus, allowedMimeTypes, maxFileSizeBytes, uploadedDocuments:
-// [{ applicationDocumentId, fileName, overallStatus }] }] }] -- verified live.
-// This is richer than the separate document-progress endpoint (which only has
-// documentType/order/overallStatus) - it's what carries isMultipleAllowed and
-// the per-file ids needed to download/verify/reject/delete an individual file.
-// A requirement can have zero, one, or (when isMultipleAllowed) several
-// uploaded files, each independently actionable.
+// [{ applicationDocumentId, fileName, overallStatus, fileSizeBytes, createdAt, remarks }] }] }] -- verified live.
 const normalizeDocumentRequirement = (raw = {}, stageCode, stageName) => {
   const dt = raw.documentType ?? {};
   const documentTypeId = dt.documentTypeId ?? null;
@@ -49,14 +45,22 @@ const normalizeDocumentRequirement = (raw = {}, stageCode, stageName) => {
     id: d.applicationDocumentId,
     fileName: d.fileName,
     status: d.overallStatus,
+    fileSizeBytes: d.fileSizeBytes ?? null,
+    createdAt: d.createdAt ?? null,
+    remarks: d.remarks ?? null,
   }));
+
+  let label = dt.documentTypeName ?? 'Document';
+  if (label.trim().toLowerCase() === 'other documents' && stageName) {
+    label = `Other Documents (${stageName})`;
+  }
 
   return {
     documentTypeId,
     key: documentTypeId,
     stageCode,
     stageName,
-    label: dt.documentTypeName ?? 'Document',
+    label,
     code: dt.documentTypeCode ?? null,
     required: !!raw.isRequired,
     isMultipleAllowed: !!raw.isMultipleAllowed,
@@ -113,7 +117,10 @@ const ApplicationDetails = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [leadId, setLeadId] = useState(location.state?.leadId ?? null);
+  const searchParams = new URLSearchParams(location.search);
+  const initialLeadId = searchParams.get('leadId') || location.state?.leadId || null;
+
+  const [leadId, setLeadId] = useState(initialLeadId);
   const [application, setApplication] = useState(null);
   const [documents, setDocuments] = useState([]);
   const [activities, setActivities] = useState([]);
@@ -125,8 +132,10 @@ const ApplicationDetails = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusModalError, setStatusModalError] = useState('');
   const [newStatus, setNewStatus] = useState('');
   const [showStageModal, setShowStageModal] = useState(false);
+  const [stageModalError, setStageModalError] = useState('');
   const [newStage, setNewStage] = useState('');
   const [remarks, setRemarks] = useState('');
   const [noteContent, setNoteContent] = useState('');
@@ -134,6 +143,14 @@ const ApplicationDetails = () => {
   const [docBusyKey, setDocBusyKey] = useState(null);
   const [editingNote, setEditingNote] = useState(null);
   const [editingNoteText, setEditingNoteText] = useState('');
+  const [rejectModalDoc, setRejectModalDoc] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const modalStatusOptions = useMemo(() => {
+    if (!application?.stage) return APPLICATION_STATUS.options;
+    const allowed = getStageAllowedStatuses(application.stage);
+    return APPLICATION_STATUS.options.filter((opt) => allowed.includes(opt.value));
+  }, [application?.stage]);
 
   useEffect(() => {
     loadApplication();
@@ -150,9 +167,9 @@ const ApplicationDetails = () => {
     setError('');
     try {
       // The API is nested under /crm/leads/{leadId}/applications/{applicationId} -
-      // leadId normally arrives via navigation state from the Applications list;
-      // on a direct URL visit, page through the list to find the owning lead.
-      let resolvedLeadId = location.state?.leadId ?? null;
+      // leadId normally arrives via URL query param (?leadId=) or navigation state.
+      // On a direct URL visit without leadId, page through the list to find the owning lead.
+      let resolvedLeadId = searchParams.get('leadId') || location.state?.leadId || leadId || null;
       if (!resolvedLeadId) {
         resolvedLeadId = await applicationService.findLeadId(applicationId);
       }
@@ -202,16 +219,17 @@ const ApplicationDetails = () => {
   const handleUpdateStatus = async () => {
     if (!newStatus || !leadId) return;
     setSavingAction(true);
-    setActionError('');
+    setStatusModalError('');
     try {
       await applicationService.changeStatus(leadId, applicationId, { toStatus: newStatus, remarks: remarks.trim() || undefined });
       setShowStatusModal(false);
       setNewStatus('');
       setRemarks('');
+      setStatusModalError('');
       loadApplication();
     } catch (err) {
       console.error('Failed to update status:', err);
-      setActionError(err.message || 'Failed to update status. Please try again.');
+      setStatusModalError(err.message || 'Failed to update status. Please try again.');
     } finally {
       setSavingAction(false);
     }
@@ -220,16 +238,17 @@ const ApplicationDetails = () => {
   const handleUpdateStage = async () => {
     if (!newStage || !leadId) return;
     setSavingAction(true);
-    setActionError('');
+    setStageModalError('');
     try {
       await applicationService.changeStage(leadId, applicationId, { toStage: newStage, remarks: remarks.trim() || undefined });
       setShowStageModal(false);
       setNewStage('');
       setRemarks('');
+      setStageModalError('');
       loadApplication();
     } catch (err) {
       console.error('Failed to update stage:', err);
-      setActionError(err.message || 'Failed to update stage. Please try again.');
+      setStageModalError(err.message || 'Failed to update stage. Please try again.');
     } finally {
       setSavingAction(false);
     }
@@ -237,17 +256,15 @@ const ApplicationDetails = () => {
 
   // --- Documents -----------------------------------------------------------
 
-  // Verify/Reject/Download/Delete all target a specific uploaded file now (a
-  // requirement can hold several when isMultipleAllowed is true), so each
-  // takes the uploadedDoc row alongside the parent requirement.
   const docRowKey = (doc, uploadedDoc) => `${doc.key}-${uploadedDoc.id}`;
 
   const handleDocumentStatus = async (doc, uploadedDoc, toStatus) => {
     if (!leadId || !uploadedDoc) return;
 
-    let remarks;
     if (toStatus === 'REJECTED') {
-      remarks = window.prompt('Why is this document being rejected? (optional, max 500 chars)') ?? undefined;
+      setRejectModalDoc({ doc, uploadedDoc });
+      setRejectReason('');
+      return;
     }
 
     setDocBusyKey(docRowKey(doc, uploadedDoc));
@@ -255,11 +272,32 @@ const ApplicationDetails = () => {
     try {
       await applicationService.changeDocumentStatus(leadId, applicationId, uploadedDoc.id, {
         toStatus,
-        remarks: remarks?.trim() || undefined,
+        remarks: undefined,
       });
       await loadApplication();
     } catch (err) {
       console.error('Failed to change document status:', err);
+      setActionError(err.message || 'Failed to update the document status.');
+    } finally {
+      setDocBusyKey(null);
+    }
+  };
+
+  const handleConfirmReject = async () => {
+    if (!rejectModalDoc || !leadId) return;
+    const { doc, uploadedDoc } = rejectModalDoc;
+    setDocBusyKey(docRowKey(doc, uploadedDoc));
+    setActionError('');
+    try {
+      await applicationService.changeDocumentStatus(leadId, applicationId, uploadedDoc.id, {
+        toStatus: 'REJECTED',
+        remarks: rejectReason.trim() || undefined,
+      });
+      setRejectModalDoc(null);
+      setRejectReason('');
+      await loadApplication();
+    } catch (err) {
+      console.error('Failed to reject document:', err);
       setActionError(err.message || 'Failed to update the document status.');
     } finally {
       setDocBusyKey(null);
@@ -283,24 +321,6 @@ const ApplicationDetails = () => {
     }
   };
 
-  // Delete is verified live: DELETE /applications/{applicationId}/documents/{documentId}
-  // - intentionally NOT /crm-prefixed and has no leadId in the path, unlike
-  // every other call in applicationService.js. Do not "fix" this to match.
-  const handleDeleteDocument = async (doc, uploadedDoc) => {
-    if (!window.confirm(`Delete "${uploadedDoc.fileName ?? 'this document'}"? This cannot be undone.`)) return;
-    setDocBusyKey(docRowKey(doc, uploadedDoc));
-    setActionError('');
-    try {
-      await applicationService.deleteDocument(applicationId, uploadedDoc.id);
-      await loadApplication();
-    } catch (err) {
-      console.error('Failed to delete document:', err);
-      setActionError(err.message || 'Failed to delete the document.');
-    } finally {
-      setDocBusyKey(null);
-    }
-  };
-
   // Uploads one requirement's files sequentially - avoids racing multiple PUTs
   // against the same presigned-URL flow and keeps failures attributable per file.
   const handleUpload = async (doc, files) => {
@@ -310,14 +330,15 @@ const ApplicationDetails = () => {
     const failed = [];
     for (const file of files) {
       if (doc.maxFileSizeBytes && file.size > doc.maxFileSizeBytes) {
-        failed.push(`${file.name} (too large)`);
+        failed.push(`${file.name} (exceeds ${Math.round(doc.maxFileSizeBytes / (1024 * 1024))} MB limit)`);
         continue;
       }
       try {
         await applicationService.uploadDocument(leadId, applicationId, doc.documentTypeId, file);
       } catch (err) {
         console.error('Failed to upload document:', err);
-        failed.push(file.name);
+        const serverReason = err.response?.data?.message || err.message;
+        failed.push(`${file.name} (${serverReason})`);
       }
     }
     if (failed.length) setActionError(`Failed to upload: ${failed.join(', ')}`);
@@ -559,12 +580,15 @@ const ApplicationDetails = () => {
                         width: isMobile ? '28px' : '36px',
                         height: isMobile ? '28px' : '36px',
                         borderRadius: '50%',
-                        backgroundColor: isCompleted ? colors.success : colors.appBg,
-                        border: `2px solid ${isCompleted ? colors.success : colors.borderLight}`,
+                        backgroundColor: isCurrent ? colors.brandPrimary : (isCompleted ? colors.success : colors.appBg),
+                        border: isCurrent
+                          ? `2px solid ${colors.brandPrimary}`
+                          : `2px solid ${isCompleted ? colors.success : colors.borderLight}`,
+                        boxShadow: isCurrent ? '0 0 0 4px #e0e7ff' : 'none',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: isCompleted ? '#fff' : colors.textSecondary,
+                        color: (isCurrent || isCompleted) ? '#fff' : colors.textSecondary,
                         transition: 'all 0.3s ease',
                         zIndex: 2,
                         fontSize: '11px',
@@ -577,14 +601,29 @@ const ApplicationDetails = () => {
                       style={{
                         marginTop: '8px',
                         fontSize: isMobile ? '10px' : '11px',
-                        fontWeight: isCurrent ? '600' : '400',
-                        color: isCompleted ? colors.textPrimary : colors.textSecondary,
+                        fontWeight: isCurrent ? '700' : (isCompleted ? '500' : '400'),
+                        color: isCurrent ? colors.brandPrimary : (isCompleted ? colors.textPrimary : colors.textSecondary),
                         textAlign: 'center',
                         maxWidth: '80px',
                       }}
                     >
                       {step.label}
                     </span>
+                    {isCurrent && (
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          color: colors.brandPrimary,
+                          fontWeight: '600',
+                          backgroundColor: '#eef2ff',
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                          marginTop: '2px',
+                        }}
+                      >
+                        Current
+                      </span>
+                    )}
                   </div>
                   {index < stageSteps.length - 1 && (
                     <div
@@ -697,7 +736,7 @@ const ApplicationDetails = () => {
                                   opacity: fileBusy ? 0.6 : 1,
                                 }}
                               >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
                                   {uploadedDoc.status === 'VERIFIED' ? (
                                     <CheckCircle size={16} color={colors.success} style={{ flexShrink: 0 }} />
                                   ) : (
@@ -707,9 +746,20 @@ const ApplicationDetails = () => {
                                       style={{ flexShrink: 0 }}
                                     />
                                   )}
-                                  <span style={{ fontSize: '13px', color: colors.textPrimary, wordBreak: 'break-word' }}>
-                                    {uploadedDoc.fileName || 'Untitled file'}
-                                  </span>
+                                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                    <span style={{ fontSize: '13px', color: colors.textPrimary, wordBreak: 'break-word', fontWeight: '500' }}>
+                                      {uploadedDoc.fileName || 'Untitled file'}
+                                    </span>
+                                    <div style={{ display: 'flex', gap: '8px', fontSize: '11px', color: colors.textSecondary, marginTop: '2px', flexWrap: 'wrap' }}>
+                                      {uploadedDoc.fileSizeBytes ? <span>{Math.round(uploadedDoc.fileSizeBytes / 1024)} KB</span> : null}
+                                      {uploadedDoc.createdAt ? <span>Uploaded {new Date(uploadedDoc.createdAt).toLocaleDateString()}</span> : null}
+                                    </div>
+                                    {uploadedDoc.remarks && uploadedDoc.status === 'REJECTED' && (
+                                      <div style={{ fontSize: '12px', color: colors.error, marginTop: '4px', fontStyle: 'italic' }}>
+                                        Reason: {uploadedDoc.remarks}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
 
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', flexShrink: 0 }}>
@@ -729,9 +779,6 @@ const ApplicationDetails = () => {
                                       Reject
                                     </Button>
                                   )}
-                                  <Button variant="ghost" size="small" icon={Trash2} disabled={fileBusy} onClick={() => handleDeleteDocument(doc, uploadedDoc)}>
-                                    Delete
-                                  </Button>
                                 </div>
                               </div>
                             );
@@ -763,6 +810,7 @@ const ApplicationDetails = () => {
                         <textarea
                           value={editingNoteText}
                           onChange={(e) => setEditingNoteText(e.target.value)}
+                          maxLength={1000}
                           style={{
                             width: '100%',
                             minHeight: '80px',
@@ -775,21 +823,24 @@ const ApplicationDetails = () => {
                             boxSizing: 'border-box',
                           }}
                         />
-                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                          <Button
-                            variant="ghost"
-                            size="small"
-                            onClick={() => { setEditingNote(null); setEditingNoteText(''); }}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            size="small"
-                            onClick={handleSaveNoteEdit}
-                            disabled={savingAction || !editingNoteText.trim()}
-                          >
-                            {savingAction ? 'Saving...' : 'Save'}
-                          </Button>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '12px', color: colors.textSecondary }}>{editingNoteText.length}/1000</span>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <Button
+                              variant="ghost"
+                              size="small"
+                              onClick={() => { setEditingNote(null); setEditingNoteText(''); }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              size="small"
+                              onClick={handleSaveNoteEdit}
+                              disabled={savingAction || !editingNoteText.trim()}
+                            >
+                              {savingAction ? 'Saving...' : 'Save'}
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ) : (
@@ -829,25 +880,31 @@ const ApplicationDetails = () => {
                 <p style={{ margin: 0, color: colors.textSecondary }}>No notes yet.</p>
               )}
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <textarea
-                value={noteContent}
-                onChange={(e) => setNoteContent(e.target.value)}
-                placeholder="Add a note..."
-                style={{
-                  flex: 1,
-                  minHeight: '44px',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: `1px solid ${colors.borderLight}`,
-                  fontSize: '14px',
-                  fontFamily: 'inherit',
-                  resize: 'vertical'
-                }}
-              />
-              <Button icon={MessageSquare} onClick={handleAddNote} disabled={savingAction || !noteContent.trim()}>
-                Add
-              </Button>
+            <div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <textarea
+                  value={noteContent}
+                  onChange={(e) => setNoteContent(e.target.value)}
+                  maxLength={1000}
+                  placeholder="Add a note..."
+                  style={{
+                    flex: 1,
+                    minHeight: '44px',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: `1px solid ${colors.borderLight}`,
+                    fontSize: '14px',
+                    fontFamily: 'inherit',
+                    resize: 'vertical'
+                  }}
+                />
+                <Button icon={MessageSquare} onClick={handleAddNote} disabled={savingAction || !noteContent.trim()}>
+                  Add
+                </Button>
+              </div>
+              <div style={{ textAlign: 'right', fontSize: '12px', color: colors.textSecondary, marginTop: '4px' }}>
+                {noteContent.length}/1000
+              </div>
             </div>
           </Card>
         </div>
@@ -926,12 +983,12 @@ const ApplicationDetails = () => {
       {/* Update Status Modal */}
       <Modal
         isOpen={showStatusModal}
-        onClose={() => { setShowStatusModal(false); setRemarks(''); }}
+        onClose={() => { setShowStatusModal(false); setRemarks(''); setStatusModalError(''); }}
         title="Update Application Status"
         size="small"
         footer={
           <>
-            <Button variant="ghost" onClick={() => { setShowStatusModal(false); setRemarks(''); }}>
+            <Button variant="ghost" onClick={() => { setShowStatusModal(false); setRemarks(''); setStatusModalError(''); }}>
               Cancel
             </Button>
             <Button
@@ -944,11 +1001,16 @@ const ApplicationDetails = () => {
         }
       >
         <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {statusModalError && (
+            <Alert variant="error" onDismiss={() => setStatusModalError('')}>
+              {statusModalError}
+            </Alert>
+          )}
           <Select
             label="New Status"
             value={newStatus}
-            onChange={(e) => setNewStatus(e.target.value)}
-            options={APPLICATION_STATUS.options}
+            onChange={(e) => { setNewStatus(e.target.value); setRemarks(''); setStatusModalError(''); }}
+            options={modalStatusOptions}
             containerStyle={{ marginBottom: 0 }}
           />
           <div>
@@ -981,12 +1043,12 @@ const ApplicationDetails = () => {
       {/* Update Stage Modal */}
       <Modal
         isOpen={showStageModal}
-        onClose={() => { setShowStageModal(false); setRemarks(''); }}
+        onClose={() => { setShowStageModal(false); setRemarks(''); setStageModalError(''); }}
         title="Update Application Stage"
         size="small"
         footer={
           <>
-            <Button variant="ghost" onClick={() => { setShowStageModal(false); setRemarks(''); }}>
+            <Button variant="ghost" onClick={() => { setShowStageModal(false); setRemarks(''); setStageModalError(''); }}>
               Cancel
             </Button>
             <Button
@@ -999,10 +1061,15 @@ const ApplicationDetails = () => {
         }
       >
         <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {stageModalError && (
+            <Alert variant="error" onDismiss={() => setStageModalError('')}>
+              {stageModalError}
+            </Alert>
+          )}
           <Select
             label="New Stage"
             value={newStage}
-            onChange={(e) => setNewStage(e.target.value)}
+            onChange={(e) => { setNewStage(e.target.value); setRemarks(''); setStageModalError(''); }}
             options={APPLICATION_STAGE.options}
             containerStyle={{ marginBottom: 0 }}
           />
@@ -1029,6 +1096,54 @@ const ApplicationDetails = () => {
                 resize: 'vertical'
               }}
             />
+          </div>
+        </div>
+      </Modal>
+
+      {/* Reject Document Modal */}
+      <Modal
+        isOpen={!!rejectModalDoc}
+        onClose={() => { setRejectModalDoc(null); setRejectReason(''); }}
+        title="Reject Document"
+        size="small"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => { setRejectModalDoc(null); setRejectReason(''); }}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleConfirmReject}
+              disabled={docBusyKey !== null || !rejectReason.trim()}
+            >
+              {docBusyKey !== null ? 'Rejecting...' : 'Confirm Rejection'}
+            </Button>
+          </>
+        }
+      >
+        <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <p style={{ margin: 0, fontSize: '14px', color: colors.textPrimary }}>
+            Please provide a reason for rejecting <strong>{rejectModalDoc?.uploadedDoc?.fileName || 'this document'}</strong>:
+          </p>
+          <textarea
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            maxLength={500}
+            placeholder="e.g. Document is expired, blurry, or missing pages..."
+            style={{
+              width: '100%',
+              minHeight: '90px',
+              padding: '12px',
+              borderRadius: '8px',
+              border: `1px solid ${colors.borderLight}`,
+              fontSize: '14px',
+              fontFamily: 'inherit',
+              resize: 'vertical',
+              boxSizing: 'border-box',
+            }}
+          />
+          <div style={{ textAlign: 'right', fontSize: '12px', color: colors.textSecondary }}>
+            {rejectReason.length}/500
           </div>
         </div>
       </Modal>

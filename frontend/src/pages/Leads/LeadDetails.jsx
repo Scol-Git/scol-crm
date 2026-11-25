@@ -45,6 +45,8 @@ const LeadDetails = () => {
   const [courseResults, setCourseResults] = useState([]);
   const [courseSearching, setCourseSearching] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const [courseIntakes, setCourseIntakes] = useState([]);
+  const [selectedIntakeKey, setSelectedIntakeKey] = useState('');
   const [intakeMonth, setIntakeMonth] = useState('');
   const [intakeYear, setIntakeYear] = useState('');
   const [newAppSaving, setNewAppSaving] = useState(false);
@@ -68,6 +70,7 @@ const LeadDetails = () => {
     address: '',
     city: '',
     gender: '',
+    dateOfBirth: '',
     targetCountryId: '',
     consultantId: '',
     registerSource: '',
@@ -102,6 +105,7 @@ const LeadDetails = () => {
       address: data.address || '',
       city: data.city || '',
       gender: data.gender || '',
+      dateOfBirth: data.dateOfBirth ? String(data.dateOfBirth).split('T')[0] : '',
       targetCountryId: data.targetCountryId || '',
       consultantId: data.consultantId || '',
       registerSource: data.registerSource || '',
@@ -140,6 +144,7 @@ const LeadDetails = () => {
           phone: profile.personal.phoneNumber,
           email: profile.personal.email,
           address: profile.personal.address,
+          dateOfBirth: profile.personal.dateOfBirth,
           status: profile.personal.leadStatus,
           createdAt: profile.personal.joined,
           targetUniversities: profile.personal.targetUniversities ?? [],
@@ -149,8 +154,11 @@ const LeadDetails = () => {
       // On first load prefer the richer row handed over by the Leads list;
       // on a refresh after saving, layer fresh profile values over what we
       // already hold. Drop profile keys that came back empty so they cannot
-      // wipe a value the list gave us.
-      const fallback = base ?? location.state?.lead ?? null;
+      // wipe a value the list gave us. If neither is present, walk list to recover row.
+      let fallback = base ?? location.state?.lead ?? null;
+      if (!fallback) {
+        fallback = await leadService.findLead(id);
+      }
       let data;
       if (fallback && fromProfile) {
         const defined = Object.fromEntries(
@@ -206,20 +214,82 @@ const LeadDetails = () => {
     setCourseQuery('');
     setCourseResults([]);
     setSelectedCourse(null);
+    setCourseIntakes([]);
+    setSelectedIntakeKey('');
     setIntakeMonth('');
     setIntakeYear('');
     setNewAppError('');
   };
 
-  const selectCourseForApplication = (course) => {
+  const selectCourseForApplication = async (course) => {
     setSelectedCourse(course);
     setCourseResults([]);
     setCourseQuery(`${course.name} — ${course.university?.name ?? 'Unknown university'}`);
+    setCourseSearching(true);
+    try {
+      // SCOL-CRM-001 & SCOL-CRM-021:
+      // Search endpoint returns intake.id as courseId.
+      // Calling getById resolves real uniCourseId and available intakes.
+      const details = await courseService.getById(course.id);
+      const realCourseId = details?.course?.courseId || course.id;
+      const rawIntakes = details?.course?.upcomingIntakes || details?.course?.intakes || [];
+      const stringIntakes = Array.isArray(details?.course?.intakeDates?.intakes) ? details.course.intakeDates.intakes : [];
+
+      let availableIntakes = [];
+      if (Array.isArray(rawIntakes) && rawIntakes.length > 0) {
+        availableIntakes = rawIntakes.map((item) => ({
+          month: item.intakeMonth,
+          year: item.intakeYear,
+          label: `${MONTHS.find((m) => m.value === item.intakeMonth)?.label || item.intakeMonth} ${item.intakeYear}`,
+          value: `${item.intakeMonth}-${item.intakeYear}`,
+        }));
+      } else if (stringIntakes.length > 0) {
+        availableIntakes = stringIntakes.map((str) => {
+          const parts = String(str).trim().split(/\s+/);
+          const monthName = parts[0];
+          const yearNum = Number(parts[1]) || new Date().getFullYear();
+          const matchedMonth = MONTHS.find((m) => m.label.toLowerCase() === monthName?.toLowerCase() || String(m.value) === monthName);
+          const monthNum = matchedMonth ? matchedMonth.value : 12;
+          return {
+            month: monthNum,
+            year: yearNum,
+            label: `${MONTHS.find((m) => m.value === monthNum)?.label || monthNum} ${yearNum}`,
+            value: `${monthNum}-${yearNum}`,
+          };
+        });
+      } else if (course.intake) {
+        const monthNum = typeof course.intake.name === 'string'
+          ? (MONTHS.find((m) => m.label.toLowerCase() === course.intake.name.toLowerCase())?.value || 12)
+          : (course.intake.intakeMonth || 12);
+        const yearNum = course.intake.year || course.intake.intakeYear || new Date().getFullYear();
+        availableIntakes = [{
+          month: monthNum,
+          year: yearNum,
+          label: `${MONTHS.find((m) => m.value === monthNum)?.label || monthNum} ${yearNum}`,
+          value: `${monthNum}-${yearNum}`,
+        }];
+      }
+
+      setCourseIntakes(availableIntakes);
+      if (availableIntakes.length > 0) {
+        setIntakeMonth(String(availableIntakes[0].month));
+        setIntakeYear(String(availableIntakes[0].year));
+        setSelectedIntakeKey(availableIntakes[0].value);
+      }
+      setSelectedCourse({
+        ...course,
+        id: realCourseId,
+      });
+    } catch (e) {
+      console.warn('Failed to load course details for intakes:', e);
+    } finally {
+      setCourseSearching(false);
+    }
   };
 
   const handleCreateApplication = async () => {
     if (!selectedCourse?.university?.id || !selectedCourse?.id || !intakeMonth || !intakeYear) {
-      setNewAppError('Select a course and intake month/year.');
+      setNewAppError('Select a course and an intake.');
       return;
     }
     setNewAppSaving(true);
@@ -387,6 +457,30 @@ const LeadDetails = () => {
     }
     if (overall < 0) { setResultSaveError('Overall score cannot be negative.'); return; }
 
+    if (englishForm.testDate) {
+      const selected = new Date(englishForm.testDate);
+      const today = new Date();
+      if (selected > today) {
+        setResultSaveError('Test passing date cannot be in the future.');
+        return;
+      }
+    }
+
+    const testNameLower = String(editingEnglish?.testName || '').toLowerCase();
+    const isIelts = testNameLower.includes('ielts');
+    if (isIelts) {
+      if (overall < 0 || overall > 9 || (overall * 2) % 1 !== 0) {
+        setResultSaveError('IELTS overall score must be between 0 and 9 in 0.5 increments (e.g. 6.5, 7.0).');
+        return;
+      }
+    }
+
+    const isToefl = testNameLower.includes('toefl');
+    if (isToefl && (overall < 0 || overall > 120)) {
+      setResultSaveError('TOEFL iBT overall score must be between 0 and 120.');
+      return;
+    }
+
     const specs = editingEnglish?.validation?.sections ?? [];
     const entries = specs.map((s) => [s, englishForm.sections[s.id]]);
     const anyFilled = entries.some(([, v]) => v !== '' && v != null);
@@ -398,6 +492,24 @@ const LeadDetails = () => {
     if (bad) {
       setResultSaveError(`${bad[0].name} cannot exceed ${bad[0].maxScore}.`);
       return;
+    }
+
+    if (isIelts && anyFilled) {
+      for (const [s, v] of entries) {
+        const num = Number(v);
+        if (num < 0 || num > 9 || (num * 2) % 1 !== 0) {
+          setResultSaveError(`IELTS ${s.name} score must be between 0 and 9 in 0.5 increments.`);
+          return;
+        }
+      }
+    }
+
+    if (isToefl && anyFilled) {
+      const sumSections = entries.reduce((acc, [, v]) => acc + Number(v || 0), 0);
+      if (Math.round(overall) !== Math.round(sumSections)) {
+        setResultSaveError(`TOEFL overall score (${overall}) must equal the sum of section scores (${sumSections}).`);
+        return;
+      }
     }
 
     setSavingResult(true);
@@ -654,7 +766,7 @@ const LeadDetails = () => {
             <div>
               <div style={labelStyle}>Address</div>
               <div style={valueStyle}>
-                {lead.address ? `${lead.address}, ${lead.city || ''}` : 'Not provided'}
+                {[lead.address, lead.city].filter(Boolean).join(', ') || 'Not provided'}
               </div>
             </div>
           </div>
@@ -845,7 +957,7 @@ const LeadDetails = () => {
               {applications.map((app) => (
                 <button
                   key={app.id}
-                  onClick={() => navigate(`/applications/${app.id}`, { state: { leadId: id } })}
+                  onClick={() => navigate(`/applications/${app.id}?leadId=${id}`, { state: { leadId: id } })}
                   style={{
                     display: 'flex',
                     flexDirection: isMobile ? 'column' : 'row',
@@ -957,22 +1069,39 @@ const LeadDetails = () => {
             <Alert variant="info">
               Selected: <strong>{selectedCourse.name}</strong> at {selectedCourse.university?.name}
             </Alert>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            {courseIntakes.length > 0 ? (
               <Select
-                label="Intake Month"
-                value={intakeMonth}
-                onChange={(e) => setIntakeMonth(e.target.value)}
-                options={MONTHS.map((m) => ({ value: String(m.value), label: m.label }))}
-                placeholder="Select month"
+                label="Select Intake"
+                value={selectedIntakeKey}
+                onChange={(e) => {
+                  setSelectedIntakeKey(e.target.value);
+                  const chosen = courseIntakes.find((opt) => opt.value === e.target.value);
+                  if (chosen) {
+                    setIntakeMonth(String(chosen.month));
+                    setIntakeYear(String(chosen.year));
+                  }
+                }}
+                options={courseIntakes.map((opt) => ({ value: opt.value, label: opt.label }))}
+                placeholder="Choose intake"
               />
-              <Input
-                label="Intake Year"
-                type="number"
-                value={intakeYear}
-                onChange={(e) => setIntakeYear(e.target.value)}
-                placeholder="e.g. 2026"
-              />
-            </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <Select
+                  label="Intake Month"
+                  value={intakeMonth}
+                  onChange={(e) => setIntakeMonth(e.target.value)}
+                  options={MONTHS.map((m) => ({ value: String(m.value), label: m.label }))}
+                  placeholder="Select month"
+                />
+                <Input
+                  label="Intake Year"
+                  type="number"
+                  value={intakeYear}
+                  onChange={(e) => setIntakeYear(e.target.value)}
+                  placeholder="e.g. 2026"
+                />
+              </div>
+            )}
           </>
         )}
       </Modal>
@@ -1135,6 +1264,13 @@ const LeadDetails = () => {
             name="email"
             type="email"
             value={formData.email}
+            onChange={handleInputChange}
+          />
+          <Input
+            label="Date of Birth"
+            name="dateOfBirth"
+            type="date"
+            value={formData.dateOfBirth}
             onChange={handleInputChange}
           />
           <Input

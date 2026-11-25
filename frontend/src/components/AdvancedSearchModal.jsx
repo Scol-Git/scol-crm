@@ -29,13 +29,19 @@ const EMPTY = {
   hasScholarship: null,
 };
 
-const AdvancedSearchModal = ({ isOpen, onClose, onSearch, initialValues }) => {
+const AdvancedSearchModal = ({ isOpen, onClose, onSearch, onReset, initialValues }) => {
   const [form, setForm] = useState(initialValues ?? EMPTY);
   const [countries, setCountries] = useState([]);
   const [programmes, setProgrammes] = useState([]);
   const [cities, setCities] = useState([]);
   const [citiesLoading, setCitiesLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setForm(initialValues ?? EMPTY);
+    }
+  }, [isOpen, initialValues]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -285,7 +291,14 @@ const AdvancedSearchModal = ({ isOpen, onClose, onSearch, initialValues }) => {
         </div>
 
         <div style={{ display: 'flex', gap: '12px' }}>
-          <Button variant="ghost" onClick={() => setForm(EMPTY)} style={{ flexShrink: 0 }}>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setForm(EMPTY);
+              onReset?.();
+            }}
+            style={{ flexShrink: 0 }}
+          >
             Reset
           </Button>
           <Button onClick={handleSearch} style={{ flex: 1 }}>

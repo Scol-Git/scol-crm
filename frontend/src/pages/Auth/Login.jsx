@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, Phone } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../theme';
@@ -8,7 +8,8 @@ import logoRed from '../../assets/Logo/logo_red.png';
 
 const Login = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const location = useLocation();
+  const { login, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState({
     identifier: '',
     password: '',
@@ -18,6 +19,15 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loginMethod, setLoginMethod] = useState('email'); // 'email' or 'phone'
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      const from = location.state?.from?.pathname
+        ? (location.state.from.pathname + (location.state.from.search || ''))
+        : '/dashboard';
+      navigate(from, { replace: true });
+    }
+  }, [isAuthenticated, location.state, navigate]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -43,7 +53,10 @@ const Login = () => {
         [loginMethod]: formData.identifier,
         password: formData.password,
       });
-      navigate('/dashboard');
+      const from = location.state?.from?.pathname
+        ? (location.state.from.pathname + (location.state.from.search || ''))
+        : '/dashboard';
+      navigate(from, { replace: true });
     } catch (err) {
       setError(err.message || 'Login failed. Please try again.');
     } finally {

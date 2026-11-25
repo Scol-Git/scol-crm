@@ -6,6 +6,17 @@ import { leadService, buildLeadQuery } from '../../services';
 import { LEAD_STATUS, leadStatusVariant, REGISTER_SOURCE, GENDER_OPTIONS } from '../../services/mappers';
 import { colors } from '../../theme';
 
+const normalizePhone = (phone) => {
+  if (!phone) return '';
+  let cleaned = String(phone).replace(/[\s\-()]/g, '');
+  if (cleaned.startsWith('+880')) {
+    cleaned = '0' + cleaned.slice(4);
+  } else if (cleaned.startsWith('880')) {
+    cleaned = '0' + cleaned.slice(3);
+  }
+  return cleaned;
+};
+
 const LeadList = () => {
   const navigate = useNavigate();
   const [leads, setLeads] = useState([]);
@@ -26,6 +37,7 @@ const LeadList = () => {
     fullName: '',
     phone: '',
     email: '',
+    dateOfBirth: '',
     address: '',
     city: '',
     gender: '',
@@ -46,6 +58,7 @@ const LeadList = () => {
     country: '',
     englishTest: '',
   });
+  const [dateError, setDateError] = useState('');
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
@@ -75,6 +88,11 @@ const LeadList = () => {
   });
 
   const loadLeads = async () => {
+    if (filters.dateFrom && filters.dateTo && filters.dateFrom > filters.dateTo) {
+      setDateError('From Date cannot be later than To Date.');
+      return;
+    }
+    setDateError('');
     setLoading(true);
     setError('');
     try {
@@ -131,8 +149,14 @@ const LeadList = () => {
     if (!formData.fullName.trim()) {
       newErrors.fullName = 'Full name is required';
     }
-    if (!formData.phone.trim()) {
+    const cleanedPhone = normalizePhone(formData.phone);
+    if (!cleanedPhone) {
       newErrors.phone = 'Phone number is required';
+    } else if (!/^01[3-9]\d{8}$/.test(cleanedPhone)) {
+      newErrors.phone = 'Phone must be a valid 11-digit Bangladeshi number (e.g. 01837917991)';
+    }
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      newErrors.email = 'Invalid email address';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -144,8 +168,12 @@ const LeadList = () => {
     setSaving(true);
     setSaveError('');
     try {
+      const cleanedPhone = normalizePhone(formData.phone);
+      const normalizedEmail = formData.email ? formData.email.trim().toLowerCase() : undefined;
       const created = await leadService.create({
         ...formData,
+        phone: cleanedPhone,
+        ...(normalizedEmail ? { email: normalizedEmail } : {}),
         hasPassedEnglishTest: formData.hasPassedEnglishTest === 'true',
       });
       setShowAddModal(false);
@@ -156,7 +184,12 @@ const LeadList = () => {
       loadLeads();
     } catch (err) {
       console.error('Failed to create lead:', err);
-      setSaveError(err.message || 'Failed to create lead. Please try again.');
+      const rawMsg = err.response?.data?.message || err.message;
+      let friendlyMsg = Array.isArray(rawMsg) ? rawMsg.join('. ') : String(rawMsg || '');
+      if (/duplicate|already exists|unique/i.test(friendlyMsg)) {
+        friendlyMsg = 'A lead with this email or phone number already exists.';
+      }
+      setSaveError(friendlyMsg || 'Failed to create lead. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -205,6 +238,7 @@ const LeadList = () => {
       fullName: lead.fullName || '',
       phone: lead.phone || '',
       email: lead.email || '',
+      dateOfBirth: lead.dateOfBirth ? String(lead.dateOfBirth).split('T')[0] : '',
       address: lead.address || '',
       city: lead.city || '',
       gender: lead.gender || '',
@@ -226,6 +260,7 @@ const LeadList = () => {
       fullName: '',
       phone: '',
       email: '',
+      dateOfBirth: '',
       address: '',
       city: '',
       gender: '',
@@ -454,17 +489,28 @@ const LeadList = () => {
               type="date"
               placeholder="From Date"
               value={filters.dateFrom}
-              onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+              onChange={(e) => {
+                setFilters(prev => ({ ...prev, dateFrom: e.target.value }));
+                setDateError('');
+              }}
               containerStyle={{ flex: 1, marginBottom: 0 }}
             />
             <Input
               type="date"
               placeholder="To Date"
               value={filters.dateTo}
-              onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+              onChange={(e) => {
+                setFilters(prev => ({ ...prev, dateTo: e.target.value }));
+                setDateError('');
+              }}
               containerStyle={{ flex: 1, marginBottom: 0 }}
             />
           </div>
+          {dateError && (
+            <span style={{ fontSize: '12px', color: colors.error, marginTop: '2px' }}>
+              {dateError}
+            </span>
+          )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <span style={{ fontSize: '13px', fontWeight: '500', color: colors.textSecondary }}>Status</span>
@@ -587,6 +633,13 @@ const LeadList = () => {
             placeholder="Enter email address"
           />
           <Input
+            label="Date of Birth"
+            name="dateOfBirth"
+            type="date"
+            value={formData.dateOfBirth}
+            onChange={handleInputChange}
+          />
+          <Input
             label="Address"
             name="address"
             value={formData.address}
@@ -700,6 +753,13 @@ const LeadList = () => {
             value={formData.email}
             onChange={handleInputChange}
             placeholder="Enter email address"
+          />
+          <Input
+            label="Date of Birth"
+            name="dateOfBirth"
+            type="date"
+            value={formData.dateOfBirth}
+            onChange={handleInputChange}
           />
           <Input
             label="Address"
