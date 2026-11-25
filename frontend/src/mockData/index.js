@@ -95,7 +95,7 @@ export const applicationStatuses = [
   'Pending Review',
   'Unconditional offer',
   'Enrolled',
-  'CAS/COE/120',
+  'CAS/COE/I-20',
   'Interview',
   'Conditional offer',
   'VISA'

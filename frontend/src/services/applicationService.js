@@ -327,7 +327,7 @@ export const reportService = {
     const totalApplications = applicationStatuses.length;
     const accepted = applicationStatuses.filter((st) => ['Unconditional offer', 'Enrolled', 'VISA', 'Conditional offer'].includes(st)).length;
     const enrolled = applicationStatuses.filter((st) => st === 'Enrolled').length;
-    const pending = applicationStatuses.filter((st) => ['Application Submitted', 'Pending Review', 'Interview', 'Payment', 'CAS/COE/120'].includes(st)).length;
+    const pending = applicationStatuses.filter((st) => ['Application Submitted', 'Pending Review', 'Interview', 'Payment', 'CAS/COE/I-20'].includes(st)).length;
     const totalRevenue = monthlyStats.reduce((sum, m) => sum + m.revenue, 0);
 
     return {
